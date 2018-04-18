@@ -56,7 +56,7 @@ void *leader(void *arg)
 	---------------------------------------------------------*/
 	int key_i, ret;
 	struct ibv_send_wr rem_send_wr[WINDOW_SIZE], ack_wr[BCAST_TO_CACHE_BATCH], coh_send_wr[MESSAGES_IN_BCAST_BATCH],
-			credit_wr[MAX_CREDIT_WRS], *bad_send_wr;
+			credit_send_wr[MAX_CREDIT_WRS], *bad_send_wr;
 	struct ibv_sge rem_send_sgl[WINDOW_SIZE], ack_sgl[BCAST_TO_CACHE_BATCH], coh_send_sgl[MAX_BCAST_BATCH], credit_sgl;
 	struct ibv_wc wc[MAX_REMOTE_RECV_WCS], coh_wc[MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
 	struct ibv_recv_wr rem_recv_wr[WINDOW_SIZE], coh_recv_wr[MAX_COH_RECEIVES],
@@ -75,7 +75,7 @@ void *leader(void *arg)
 	uint32_t cmd_count = 0, credit_debug_cnt = 0, outstanding_rem_reqs = 0;
 	double empty_req_percentage;
 	long long remote_for_each_worker[FOLLOWER_NUM] = {0};
-	long long rolling_iter = 0, trace_iter = 0, credit_tx = 0, br_tx = 0, sent_ack_tx = 0,
+	long long rolling_iter = 0, trace_iter = 0, credit_tx = 0, br_tx = 0, sent_ack_tx = 0, commit_br_tx = 0,
 			remote_tot_tx = 0;
 	//req_type measured_req_flag = NO_REQ;
 	struct local_latency local_measure = {
@@ -120,7 +120,7 @@ void *leader(void *arg)
 	// SEND AND RECEIVE WRs
 	set_up_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, t_id, ops_mr, protocol);
 	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-		set_up_credits(credits, credit_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
+		set_up_credits(credits, credit_send_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
 		set_up_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
 					   ack_wr, ack_sgl, coh_buf, t_id, cb, coh_mr, mcast, protocol);
 	}
@@ -177,6 +177,9 @@ void *leader(void *arg)
 			poll_coherence_LIN(&update_ops_i, incoming_reqs, &pull_ptr, update_ops, t_id, t_id,
 							   ack_size, &polled_messages, ack_ops_i, inv_size, &inv_ops_i, inv_ops);
 		}
+//    for (int i = 0; i < LEADER_PENDING_WRITES; ++i) {
+//      if (p_writes->w_state[i] == SENT) printf("Sent pending write %d \n", i);
+//    }
 //		/* ---------------------------------------------------------------------------
 //		------------------------------SEND UPDS AND ACKS TO THE CACHE------------------
 //		---------------------------------------------------------------------------*/
@@ -202,7 +205,7 @@ void *leader(void *arg)
                                                   p_writes, resp,
                                                   &latency_info, &start);
     // Assign a global write  id to each new write
-    get_wids(p_writes);
+    get_wids(p_writes, t_id);
 
 
 		/* ---------------------------------------------------------------------------
@@ -211,9 +214,11 @@ void *leader(void *arg)
 		if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
-			perform_broadcasts_LIN(&ack_size, ops, ack_bcast_ops, &ack_pop_ptr, credits,
-								   cb, credit_wc, &credit_debug_cnt, coh_send_sgl, coh_send_wr, coh_message_count,
-								   coh_buf, &coh_buf_i, &br_tx, credit_recv_wr, t_id, protocol);
+			perform_broadcasts(&ack_size, p_writes, ack_bcast_ops, &ack_pop_ptr, credits,
+                         cb, credit_wc, &credit_debug_cnt, coh_send_sgl, coh_send_wr, coh_message_count,
+                         coh_buf, &coh_buf_i, &br_tx, &commit_br_tx, credit_recv_wr, t_id, protocol, coh_recv_sgl,
+                         &push_ptr, coh_recv_wr, coh_recv_qp, LEADER_BUF_SLOTS, (void*)incoming_reqs);
+//    printf("Thread %d, broadcasts are done %llu \n", t_id, br_tx);
 
 //		/* ---------------------------------------------------------------------------
 //		------------------------------SEND CREDITS--------------------------------
@@ -223,16 +228,16 @@ void *leader(void *arg)
 //				credit messages, for the different types of buffers (Acks, Invs, Upds)
 //				If credits must be sent back, then receives for new coherence messages have to be posted first*/
 //			credit_wr_i = forge_credits_LIN(coh_message_count, acks_seen, invs_seen, upds_seen, t_id,
-//											credit_wr, &credit_tx,
+//											credit_send_wr, &credit_tx,
 //											cb, coh_recv_cq, coh_wc);
 //			if (credit_wr_i > 0)
 //				send_credits(credit_wr_i, coh_recv_sgl, cb, &push_ptr, coh_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
-//							 credit_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)incoming_reqs);
+//							 credit_send_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)incoming_reqs);
 //		}
 
 
-		op_i = 0; bool is_leader_t = true;
-		run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
+//		op_i = 0; bool is_leader_t = true;
+//		run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
 
 	}
 	return NULL;

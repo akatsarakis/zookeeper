@@ -862,9 +862,15 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
                 coh_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
                 coh_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
             } else {
-                coh_send_wr[index].wr.ud.ah = remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].ah;
-                coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
-                coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+                if (protocol == FOLLOWER) {
+                  coh_send_wr[index].wr.ud.ah = remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].ah;
+                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
+                }
+                else {
+                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
+                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
+                }
+              coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
             }
             if (protocol == FOLLOWER) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
             else coh_send_wr[index].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!

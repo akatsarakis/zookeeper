@@ -211,7 +211,7 @@
 
 
 //----------LIN flow control-----------------
-#define CREDITS_FOR_EACH_CLIENT 60 //30
+#define CREDITS_FOR_EACH_CLIENT 30
 #define UPD_CREDITS (CREDITS_FOR_EACH_CLIENT)
 #define ACK_CREDITS (CREDITS_FOR_EACH_CLIENT)
 #define INV_CREDITS (CREDITS_FOR_EACH_CLIENT)
@@ -226,11 +226,23 @@
 #define MAX_COH_MESSAGES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define MAX_COH_RECEIVES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 
+
+//--------FOLOWER Flow Control
+#define W_CREDITS 15
+
+//--------LEADER Flow Control
+#define PREPARE_CREDITS 15
+#define COMMIT_CREDITS 15
+#define BCAST_CREDITS (PREPARE_CREDITS + COMMIT_CREDITS)
+
 //---------Buffer Space-------------
 #define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
 #define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
+
+#define LEADER_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM)* (PREPARE_CREDITS + W_CREDITS))
+#define LEADER_BUF_SLOTS (LEADER_BUF_SIZE / UD_REQ_SIZE)
 
 #define OPS_BUFS_NUM (LEADER_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
 //#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
@@ -346,7 +358,7 @@ struct remote_qp {
 	// no padding needed- false sharing is not an issue, only fragmentation
 };
 
-typedef enum write_state {INVALID, VALID, SENT};
+enum write_state {INVALID, VALID, SENT};
 
 struct pending_writes {
 	struct write_op *write_ops;

@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 	is_leader = machine_id == LEADER_MACHINE;
 	num_threads =  is_leader ? LEADERS_PER_MACHINE : FOLLOWERS_PER_MACHINE;
 
-	printf("size of write_op %d \n", sizeof(struct write_op));
+	printf("size of write_op %lu \n", sizeof(struct write_op));
 	param_arr = malloc(num_threads * sizeof(struct thread_params));
 	thread_arr = malloc((LEADERS_PER_MACHINE + FOLLOWERS_PER_MACHINE + 1) * sizeof(pthread_t));
 	memset((struct thread_stats*) t_stats, 0, LEADERS_PER_MACHINE * sizeof(struct thread_stats));
