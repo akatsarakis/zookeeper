@@ -19,21 +19,23 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 19
-#define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
+#define FOLLOWERS_PER_MACHINE 4
+#define LEADERS_PER_MACHINE (3)
 #define MACHINE_NUM 2
+#define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 
 #define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 8 ? 0 : 1 )// socket where the cache is bind
 
 #define CLIENT_NUM (LEADERS_PER_MACHINE * MACHINE_NUM)
-#define WORKER_NUM (FOLLOWERS_PER_MACHINE * MACHINE_NUM)
+#define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
 
-#define WORKER_NUM_UD_QPS 1
+#define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 #define REMOTE_UD_QP_ID 0 /* The id of the UD QP the clients use for remote reqs */
 #define BROADCAST_UD_QP_ID 1 /* The id of the UD QP the clients use for braodcasting */
 #define FC_UD_QP_ID 2 /* The id of the UD QP the clients use for flow control */
-#define CLIENT_UD_QPS 3 /* The number of QPs for the client */
+#define LEADER_QP_NUM 3 /* The number of QPs for the leader */
+
 
 
 #define ENABLE_WORKERS_CRCW 1
@@ -69,10 +71,18 @@
 /*-------------------------------------------------
 	-----------------PROTOCOLS-----------------
 --------------------------------------------------*/
-#define SEQUENTIAL_CONSISTENCY 1
-#define LINEARIZABILITY 2
+#define FOLLOWER 1
+#define LEADER 2
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_CLIENT 6
+#define SESSIONS_PER_THREAD 10
+
+
+/*-------------------------------------------------
+	-----------------LEADER------------------------
+--------------------------------------------------*/
+#define LEADER_PENDING_WRITES (SESSIONS_PER_THREAD)
+
+
 
 
 /*-------------------------------------------------
@@ -90,7 +100,7 @@
 #define LOCAL_REGIONS 3 // number of local regions per client
 #define LOCAL_REGION_SIZE (LOCAL_WINDOW / LOCAL_REGIONS)
 #define WS_PER_WORKER (ENABLE_THREAD_PARTITIONING_C_TO_W == 1 ? 22 : 20) //22 /* Number of outstanding requests kept by each client of any given worker*/
-#define MAX_OUTSTANDING_REQS (WS_PER_WORKER * (WORKER_NUM - FOLLOWERS_PER_MACHINE))
+#define MAX_OUTSTANDING_REQS (WS_PER_WORKER * (FOLLOWER_NUM - FOLLOWERS_PER_MACHINE))
 #define ENABLE_MULTI_BATCHES 0 // allow multiple batches
 #define MAX_REMOTE_RECV_WCS (ENABLE_MULTI_BATCHES == 1 ? (MAX(MAX_OUTSTANDING_REQS, WINDOW_SIZE)) : WINDOW_SIZE)
 #define MINIMUM_BATCH_ABILITY 16
@@ -116,12 +126,12 @@
 
 
 // INLINING
-#define CLIENT_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (MULTIGET_AVAILABLE_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
+#define LEADER_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (MULTIGET_AVAILABLE_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
 #define WORKER_RESPONSE_MAX_SIZE (ENABLE_WORKER_COALESCING == 1 ? (MAX_COALESCE_PER_MACH * HERD_VALUE_SIZE) : HERD_VALUE_SIZE)
 #define WORKER_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (WORKER_RESPONSE_MAX_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
 
 // CACHE
-#define ENABLE_HOT_KEY_TRACKING 1
+#define ENABLE_HOT_KEY_TRACKING 0
 #define HOTTEST_KEYS_TO_TRACK 20
 
 
@@ -142,10 +152,9 @@
 #define ENABLE_WAKE_UP 0
 #define USE_ONLY_BIG_MESSAGES 0 // deprecated
 #define ONLY_CACHE_HITS 0
-#define CLIENT_SL 0 //service level for the clients
-#define WORKER_SL 0 // service level for the workers
+#define DEFAULT_SL 0 //default service level
 #define VERBOSE_DEBUG 0
-#define STALLING_DEBUG_LIN 0 // prints information about the stalled ops, check debug_stalling_LIN()
+#define STALLING_DEBUG 0 // prints information about the stalled ops, check debug_stalling_LIN()
 #define DEBUG_COALESCING 0
 #define DEBUG_WORKER_RECVS 0
 
@@ -165,10 +174,11 @@
 #define SKEW_EXPONENT_A 99 // representation divided by 100 (i.e. 99 means a = 0.99)
 #define EMULATING_CREW 1 // emulate crew, to facilitate running the CREW baseline
 #define RANDOM_MACHINE 0 // pick a rnadom machine
-#define DISABLE_CACHE 1 // Run Baseline
+#define DISABLE_CACHE 0 // Run Baseline
 #define LOAD_BALANCE 1 // Use a uniform access pattern
 #define EMULATE_SWITCH_KV 0 // Does nothing..
 #define SWITCH_KV_NODE 0 // which machine is the cache
+#define FOLLOWER_DOES_ONLY_READS 1
 
 /*-------------------------------------------------
 	-----------------CONSISTENCY-------------------------
@@ -222,10 +232,10 @@
 #define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
 
-#define OPS_BUFS_NUM (CLIENT_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
+#define OPS_BUFS_NUM (LEADER_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
 //#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
-#define COH_BUF_SIZE (CLIENT_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
-#define COH_BUF_SLOTS (CLIENT_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
+#define COH_BUF_SIZE (LEADER_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
+#define COH_BUF_SLOTS (LEADER_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
 /* We post receives for credits after sending broadcasts or acks,
 	For Broadcasts the maximum number is: (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
 	For acks the maximum number is: CEILING(BCAST_TO_CACHE_BATCH, REDITS_IN_MESSAGE)   */
@@ -255,7 +265,7 @@
 --------------------------------------------------*/
 
 //RECV
-#define WORKER_RECV_Q_DEPTH  (((MACHINE_NUM - 1) * CEILING(LEADERS_PER_MACHINE, WORKER_NUM_UD_QPS) * WS_PER_WORKER) + 3) // + 3 for good measre
+#define WORKER_RECV_Q_DEPTH  (((MACHINE_NUM - 1) * CEILING(LEADERS_PER_MACHINE, FOLLOWER_QP_NUM) * WS_PER_WORKER) + 3) // + 3 for good measre
 #define CLIENT_RECV_REM_Q_DEPTH ((ENABLE_MULTI_BATCHES == 1 ? MAX_OUTSTANDING_REQS :  2 * CLIENT_SS_BATCH) + 3)
 
 #define SC_CLIENT_RECV_BR_Q_DEPTH (SC_MAX_COH_RECEIVES + 3)
@@ -295,7 +305,8 @@ extern struct mica_kv kv;
 //Defines for parsing the trace
 #define _200_K 200000
 #define MAX_TRACE_SIZE _200_K
-#define FEED_FROM_TRACE 1
+#define FEED_FROM_TRACE 0
+#define TRACE_SIZE K_128
 #define NOP 0
 #define HOT_WRITE 1
 #define HOT_READ 2
@@ -335,18 +346,20 @@ struct remote_qp {
 	// no padding needed- false sharing is not an issue, only fragmentation
 };
 
+typedef enum write_state {INVALID, VALID, SENT};
 
-// a client sends to a particular ud qp to all workers, therefore to better utilize its L1 cache
-// we store worker AHs by QP instead of by worker id
-extern struct remote_qp remote_wrkr_qp[WORKER_NUM_UD_QPS][WORKER_NUM];
-extern struct remote_qp remote_clt_qp[CLIENT_NUM][CLIENT_UD_QPS];
-extern atomic_char clt_needed_ah_ready, wrkr_needed_ah_ready;
-struct mica_op;
-extern struct mica_op *local_req_region;
+struct pending_writes {
+	struct write_op *write_ops;
+//  uint64_t *global_ids;
+	uint32_t unordered_writes_num;
+	uint32_t writes_num;
+  uint32_t *unordered_writes;
+  enum write_state *w_state;
+};
 
 
-struct client_stats { // 2 cache lines
-	long long cache_hits_per_client;
+struct thread_stats { // 2 cache lines
+	long long cache_hits_per_thread;
 	long long remotes_per_client;
 	long long locals_per_client;
 
@@ -373,19 +386,44 @@ struct client_stats { // 2 cache lines
 };
 
 
-struct worker_stats { // 1 cache line
-	long long remotes_per_worker;
-	long long locals_per_worker;
-	long long batches_per_worker;
-	long long empty_polls_per_worker;
+struct follower_stats { // 1 cache line
+	long long cache_hits_per_thread;
+	long long remotes_per_client;
+	long long locals_per_client;
+
+	long long updates_per_client;
+	long long acks_per_client;  //only LIN
+	long long invs_per_client; //only LIN
+
+	long long received_updates_per_client;
+	long long received_acks_per_client; //only LIN
+	long long received_invs_per_client; //only LIN
+
+	long long remote_messages_per_client;
+	long long cold_keys_per_trace;
+	long long batches_per_client;
+
+	long long stalled_time_per_client;
+
+	double empty_reqs_per_trace;
+	long long wasted_loops;
+	double tot_empty_reqs_per_trace;
 
 	long long unused[4]; // padding to avoid false sharing
 };
 
 
+// a client sends to a particular ud qp to all workers, therefore to better utilize its L1 cache
+// we store worker AHs by QP instead of by worker id
+extern struct remote_qp remote_follower_qp[FOLLOWER_MACHINE_NUM][FOLLOWERS_PER_MACHINE][FOLLOWER_QP_NUM];
+extern struct remote_qp remote_leader_qp[LEADERS_PER_MACHINE][LEADER_QP_NUM];
+extern atomic_char qps_are_set_up;
 extern atomic_char local_recv_flag[FOLLOWERS_PER_MACHINE][LEADERS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
-extern struct client_stats c_stats[LEADERS_PER_MACHINE];
-extern struct worker_stats w_stats[FOLLOWERS_PER_MACHINE];
+extern struct thread_stats t_stats[LEADERS_PER_MACHINE];
+extern struct follower_stats f_stats[FOLLOWERS_PER_MACHINE];
+struct mica_op;
+extern struct mica_op *local_req_region;
+extern atomic_uint_fast64_t global_w_id;
 
 struct thread_params {
 	int id;

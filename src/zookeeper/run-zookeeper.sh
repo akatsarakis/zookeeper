@@ -66,9 +66,8 @@ sleep 1
 
 blue "Running client and worker threads"
 sudo LD_LIBRARY_PATH=/usr/local/lib/ -E \
-	./ccKVS-lin \
+	./zookeeper \
 	--local-ip $localIP \
 	--remote-ips $remoteIPs \
 	--machine-id $machine_id \
-	--postlist 1 \
 	2>&1

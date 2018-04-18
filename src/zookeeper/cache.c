@@ -253,13 +253,123 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 }
 
 /* ---------------------------------------------------------------------------
------------------------------- SEQUENTIAL_CONSISTENCY CONSISTENCY--------------------------------
+------------------------------ Zookeeper--------------------------------
+---------------------------------------------------------------------------*
+
+
+/* The leader and follower send their local requests to this, reads get served
+ * But writes do not get served, writes are only propagated here to see whether their keys exist */
+void cache_batch_op_trace(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
+	int I, j;	/* I is batch index */
+	long long stalled_brces = 0;
+#if CACHE_DEBUG == 1
+	//assert(cache.hash_table != NULL);
+	assert(op != NULL);
+	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
+	assert(resp != NULL);
+#endif
+
+#if CACHE_DEBUG == 2
+	for(I = 0; I < op_num; I++)
+		mica_print_op(&(*op)[I]);
+#endif
+
+	unsigned int bkt[CACHE_BATCH_SIZE];
+	struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
+	unsigned int tag[CACHE_BATCH_SIZE];
+	int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
+	struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
+	/*
+	 * We first lookup the key in the datastore. The first two @I loops work
+	 * for both GETs and PUTs.
+	 */
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+		bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
+		__builtin_prefetch(bkt_ptr[I], 0, 0);
+		tag[I] = (*op)[I].key.tag;
+
+		key_in_store[I] = 0;
+		kv_ptr[I] = NULL;
+	}
+
+	for(I = 0; I < op_num; I++) {
+		if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+		for(j = 0; j < 8; j++) {
+			if(bkt_ptr[I]->slots[j].in_use == 1 &&
+				 bkt_ptr[I]->slots[j].tag == tag[I]) {
+				uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
+															cache.hash_table.log_mask;
+
+				/*
+				 * We can interpret the log entry as mica_op, even though it
+				 * may not contain the full MICA_MAX_VALUE value.
+				 */
+				kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
+
+				/* Small values (1--64 bytes) can span 2 cache lines */
+				__builtin_prefetch(kv_ptr[I], 0, 0);
+				__builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
+
+				/* Detect if the head has wrapped around for this index entry */
+				if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
+					kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
+				}
+
+				break;
+			}
+		}
+	}
+
+	// the following variables used to validate atomicity between a lock-free read of an object
+	cache_meta prev_meta;
+	for(I = 0; I < op_num; I++) {
+		if(kv_ptr[I] != NULL) {
+
+			/* We had a tag match earlier. Now compare log entry. */
+			long long *key_ptr_log = (long long *) kv_ptr[I];
+			long long *key_ptr_req = (long long *) &(*op)[I];
+
+			if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
+				key_in_store[I] = 1;
+				if ((*op)[I].opcode == CACHE_OP_GET) {
+					//Lock free reads through versioning (successful when version is even)
+					do {
+						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+						resp[I].val_ptr = kv_ptr[I]->value;
+						resp[I].val_len = kv_ptr[I]->val_len;
+					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta));
+					resp[I].type = CACHE_GET_SUCCESS;
+
+				} else if ((*op)[I].opcode == CACHE_OP_PUT) {
+					resp[I].type = KEY_HIT;
+				} else {
+					red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
+					assert(0);
+				}
+			}
+		}
+
+		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+			resp[I].val_len = 0;
+			resp[I].val_ptr = NULL;
+			resp[I].type = CACHE_MISS;
+		}
+	}
+	if(ENABLE_CACHE_STATS == 1)
+		update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
+
+}
+
+
+/* ---------------------------------------------------------------------------
+------------------------------ SEQUENTIAL_CONSISTENCY--------------------------------
 ---------------------------------------------------------------------------*/
 
 /* This is used to propagate all the regular ops from the trace to the cache,
  * The size of the op depends both on the key-value size and on the coalescing degree */
 void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
-	protocol = SEQUENTIAL_CONSISTENCY;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -391,7 +501,7 @@ void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op,
 /* This is used to propagate the incoming updates that are sized according to the key-value size
  *  Unused parts are stripped!! */
 void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp) {
-	protocol = SEQUENTIAL_CONSISTENCY;
+	protocol = FOLLOWER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -505,7 +615,7 @@ void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op 
  * The size of the op depends both on the key-value size and on the coalescing degree */
 void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op,
 											  struct mica_resp *resp) {
-	protocol=LINEARIZABILITY;
+	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -799,7 +909,7 @@ void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct 
  * Unused parts are stripped!! */
 void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op,
 															struct mica_resp *resp) {
-	protocol=LINEARIZABILITY;
+	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -947,7 +1057,7 @@ void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thre
  * Unused parts are stripped!! */
 void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op,
 																  struct mica_resp *resp) {
-	protocol=LINEARIZABILITY;
+	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -1154,37 +1264,10 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 					 resp[j].type == CACHE_PUT_FAIL));
 		}
 	}
-	if ((ENABLE_HOT_KEY_TRACKING == 1) && (isSC == 0)) memset(hottest_keys_pointers, 0, sizeof(uint16_t) * HOTTEST_KEYS_TO_TRACK);
-//  green_printf("NEW BUFFER \n");
+
+//  green_printf("i %d , trace_iter %d, trace[trace_iter].opcode %d \n", i, trace_iter, trace[trace_iter].opcode);
 	while (i < CACHE_BATCH_SIZE && trace[trace_iter].opcode != NOP) {
 
-		if ((ENABLE_HOT_KEY_TRACKING == 1) && (DISABLE_CACHE == 0)) {
-			if (trace[trace_iter].key_id < HOTTEST_KEYS_TO_TRACK) {
-				if (IS_READ(trace[trace_iter].opcode) == 1) {
-					if (hottest_keys_pointers[trace[trace_iter].key_id] == 0) {
-						hottest_keys_pointers[trace[trace_iter].key_id] = i + 1; //tag the op_i+1 such that '0' means unused
-						if (isSC == 1) ops[i].value[0] = (uint8_t) trace[trace_iter].key_id; //the op tracks the key it stores
-//          yellow_printf("Start tracking key %d , in op  %d\n", trace[trace_iter].key_id, i);
-					} else {
-						uint16_t op_i = hottest_keys_pointers[trace[trace_iter].key_id] - 1;
-//            printf("opcode %d, op_i %d key %d key_pointer_to_op %d \n",
-//                   ops[op_i].opcode, op_i, trace[trace_iter].key_id, hottest_keys_pointers[trace[trace_iter].key_id]);
-						if (ENABLE_ASSERTIONS) {
-							assert((hottest_keys_pointers[trace[trace_iter].key_id] > 0));
-							assert(ops[op_i].opcode == CACHE_OP_GET);
-							assert(ops[op_i].val_len < 255);
-						}
-						ops[op_i].val_len++;
-//          yellow_printf("tracked key %d , in op  %d, new val_len %d\n", trace[trace_iter].key_id, op_i, ops[op_i].val_len);
-						trace_iter++;
-						if (trace[trace_iter].opcode == NOP)
-							trace_iter = 0;
-						continue;
-					}
-				}
-				else hottest_keys_pointers[trace[trace_iter].key_id] = 0; // on a write
-			}
-		}
 		*(uint128 *) &ops[i] = trace[trace_iter].key_hash;
 		if (MEASURE_LATENCY == 1) ops[i].key.meta.state = 0;
 		// *(uint128 *) &ops[i] = CityHash128((char *) &(trace[trace_iter].key_id), 4);
@@ -1197,14 +1280,14 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 		if(is_update)
 			if (ENABLE_ASSERTIONS == 1) assert(ops[i].val_len > 0);
 		ops[i].key.meta.cid = (uint8_t) ((ENABLE_MULTIPLE_SESSIONS == 1) ?
-										 (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_CLIENT)
+										 (uint8_t)(hrd_fastrand(&seed) % SESSIONS_PER_THREAD)
 										 * LEADERS_PER_MACHINE + thread_id : thread_id); // only for multiple sessions
 
 		if (MEASURE_LATENCY == 1) start_measurement(start, latency_info, trace[trace_iter].home_machine_id,
 													ops, i, thread_id, trace[trace_iter].opcode, isSC, next_op_i);
 
-		kh[i].machine = (uint8_t) trace[trace_iter].home_machine_id;
-		kh[i].worker = (uint8_t) trace[trace_iter].home_worker_id;
+//		kh[i].machine = (uint8_t) trace[trace_iter].home_machine_id;
+//		kh[i].worker = (uint8_t) trace[trace_iter].home_worker_id;
 		resp[i].type = EMPTY;
 		if(ops[i].opcode == CACHE_OP_PUT) //put the folowing value
 			str_to_binary(ops[i].value, "Armonia is the key to success!  ", HERD_VALUE_SIZE);
@@ -1216,12 +1299,11 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 			trace_iter = 0;
 	}
 	empty_reqs *= 100;
-	c_stats[thread_id].empty_reqs_per_trace = (double) empty_reqs / CACHE_BATCH_SIZE;
-	c_stats[thread_id].tot_empty_reqs_per_trace += c_stats[thread_id].empty_reqs_per_trace;
-	if (DISABLE_CACHE == 0) {
-		if(isSC == 1) cache_batch_op_lin_non_stalling_sessions(i, thread_id, &ops, resp);
-		else cache_batch_op_sc(i, thread_id, &ops, resp);
-	}
+	t_stats[thread_id].empty_reqs_per_trace = (double) empty_reqs / CACHE_BATCH_SIZE;
+	t_stats[thread_id].tot_empty_reqs_per_trace += t_stats[thread_id].empty_reqs_per_trace;
+
+	cache_batch_op_sc(i, thread_id, &ops, resp);
+
 	if (MEASURE_LATENCY == 1 && (DISABLE_CACHE == 0)) {
 		hot_request_bookkeeping_for_latency_measurements(start, latency_info, ops, i, thread_id, isSC, resp);
 	}
@@ -1231,6 +1313,7 @@ int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_comman
 	}
 	return trace_iter;
 }
+
 
 /*
  * WARNING: the following functions related to cache stats are not tested on this version of code
@@ -1422,6 +1505,8 @@ char* code_to_str(uint8_t code){
 			return "CACHE_PUT_SUCCESS";
 		case CACHE_UPD_SUCCESS:
 			return "CACHE_UPD_SUCCESS";
+    case KEY_HIT:
+      return "KEY_HIT";
 		case CACHE_INV_SUCCESS:
 			return "CACHE_INV_SUCCESS";
 		case CACHE_ACK_SUCCESS:

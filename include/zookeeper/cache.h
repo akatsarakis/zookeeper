@@ -13,10 +13,10 @@
 #include "mica.h"
 
 #define CACHE_DEBUG 0
-#define CACHE_NUM_BKTS (64 * 1024) //64K buckets seems to be enough to store most of 250K keys
-#define CACHE_NUM_KEYS (250 * 1000)
+#define CACHE_NUM_BKTS (128 * 1024) //64K buckets seems to be enough to store most of 250K keys
+#define CACHE_NUM_KEYS (25 * 1000)
 
-#define WRITE_RATIO 0  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define WRITE_RATIO 100  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
 #define CACHE_BATCH_SIZE 600
 
 //Cache States
@@ -43,6 +43,9 @@
 #define CACHE_ACK_SUCCESS 125
 #define CACHE_LAST_ACK_SUCCESS 126
 #define RETRY 127
+
+#define KEY_HIT 220
+
 
 #define CACHE_MISS 130
 #define CACHE_GET_STALL 131
@@ -76,6 +79,21 @@ struct cache_op {
 	uint8_t val_len;
 	uint8_t value[MICA_MAX_VALUE];
 };
+
+struct key {
+  unsigned int bkt			:32;
+  unsigned int server			:16;
+  unsigned int tag			:16;
+};
+
+struct write_op {
+  uint64_t g_id;
+  struct key key;	/* This must be the 1st field and 16B aligned */
+  uint8_t opcode;
+  uint8_t val_len;
+  uint8_t value[MICA_MAX_VALUE];
+};
+
 
 // this is used to facilitate the coalescing
 struct extended_cache_op {
@@ -176,7 +194,7 @@ static inline void start_measurement(struct timespec* start, struct latency_flag
 
 	if (ENABLE_ASSERTIONS) assert(ops[op_i].key.meta.state == 0);
 	if ((latency_info->measured_req_flag) == NO_REQ) {
-		if (c_stats[local_client_id].batches_per_client > K_32 &&
+		if (t_stats[local_client_id].batches_per_client > K_32 &&
 			op_i == ((((latency_count.total_measurements % CACHE_BATCH_SIZE) + next_op_i) % CACHE_BATCH_SIZE) + next_op_i) &&
 			local_client_id == 0 && machine_id == 0) {
 //      printf("tag a key for latency measurement \n");
@@ -195,7 +213,7 @@ static inline void start_measurement(struct timespec* start, struct latency_flag
 
 			latency_info->last_measured_op_i = op_i;
 //		green_printf("Measuring a req %llu, opcode %d, flag %d op_i %d \n",
-//								 c_stats[local_client_id].batches_per_client, opcode, latency_info->measured_req_flag, latency_info->last_measured_op_i);
+//								 t_stats[local_client_id].batches_per_client, opcode, latency_info->measured_req_flag, latency_info->last_measured_op_i);
 
 			clock_gettime(CLOCK_MONOTONIC, start);
 
@@ -259,6 +277,10 @@ void cache_init(int cache_id, int num_threads);
 void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len);
 void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
 
+
+/* The leader and follower send their local requests to this, reads get served
+ * But writes do not get served, writes are only propagated here to see whether their keys exist */
+void cache_batch_op_trace(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp);
 void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
 void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
 

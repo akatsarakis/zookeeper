@@ -32,9 +32,9 @@ void *run_worker(void *arg)
 	struct hrd_ctrl_blk *cb[MAX_SERVER_PORTS];
 	uint32_t wrkr_buf_size = worker_req_size * LEADERS_PER_MACHINE * (MACHINE_NUM - 1) * WS_PER_WORKER;
 
-	int *wrkr_recv_q_depth = malloc(WORKER_NUM_UD_QPS * sizeof(int));
-	int *wrkr_send_q_depth = malloc(WORKER_NUM_UD_QPS * sizeof(int));
-	for (qp_i = 0; qp_i < WORKER_NUM_UD_QPS; qp_i++) {
+	int *wrkr_recv_q_depth = malloc(FOLLOWER_QP_NUM * sizeof(int));
+	int *wrkr_send_q_depth = malloc(FOLLOWER_QP_NUM * sizeof(int));
+	for (qp_i = 0; qp_i < FOLLOWER_QP_NUM; qp_i++) {
 		wrkr_recv_q_depth[qp_i] = WORKER_RECV_Q_DEPTH; // TODO fix this as a performance opt(it should be at the qp granularity)
 		wrkr_send_q_depth[qp_i] = WORKER_SEND_Q_DEPTH; // TODO fix this as a performance opt
 	}
@@ -46,7 +46,7 @@ void *run_worker(void *arg)
 								  ib_port_index, use_huge_pages, /* port index, numa node */
 								  0, 0,	/* #conn qps, uc */
 								  NULL, 0, -1,	/*prealloc conn buf, buf size, key */
-								  WORKER_NUM_UD_QPS, wrkr_buf_size, MASTER_SHM_KEY + wrkr_lid, /* num_dgram_qps, dgram_buf_size, key */
+								  FOLLOWER_QP_NUM, wrkr_buf_size, MASTER_SHM_KEY + wrkr_lid, /* num_dgram_qps, dgram_buf_size, key */
 								  wrkr_recv_q_depth, wrkr_send_q_depth);	/* Depth of the dgram RECV Q*/
 	}
 
@@ -55,14 +55,14 @@ void *run_worker(void *arg)
 	---------------------------------------------------------------------------*/
 
 
-	uint16_t clts_per_qp[WORKER_NUM_UD_QPS];
-	uint32_t per_qp_buf_slots[WORKER_NUM_UD_QPS], qp_buf_base[WORKER_NUM_UD_QPS];
-	int pull_ptr[WORKER_NUM_UD_QPS] = {0}, push_ptr[WORKER_NUM_UD_QPS] = {0}; // it is useful to keep these signed
+	uint16_t clts_per_qp[FOLLOWER_QP_NUM];
+	uint32_t per_qp_buf_slots[FOLLOWER_QP_NUM], qp_buf_base[FOLLOWER_QP_NUM];
+	int pull_ptr[FOLLOWER_QP_NUM] = {0}, push_ptr[FOLLOWER_QP_NUM] = {0}; // it is useful to keep these signed
 	set_up_the_buffer_space(clts_per_qp, per_qp_buf_slots, qp_buf_base);
 	uint32_t max_reqs = (uint32_t) wrkr_buf_size / worker_req_size;
 
-	struct wrkr_ud_req *req[WORKER_NUM_UD_QPS]; // break up the buffer to ease the push/pull ptr handling
-	for (qp_i = 0; qp_i < WORKER_NUM_UD_QPS; qp_i++) {
+	struct wrkr_ud_req *req[FOLLOWER_QP_NUM]; // break up the buffer to ease the push/pull ptr handling
+	for (qp_i = 0; qp_i < FOLLOWER_QP_NUM; qp_i++) {
 		pull_ptr[qp_i] = -1;
 		req[qp_i] = (struct wrkr_ud_req *)(cb[0]->dgram_buf + (qp_buf_base[qp_i] * worker_req_size));
 	}
@@ -75,7 +75,7 @@ void *run_worker(void *arg)
 	uint32_t debug_recv = 0;
 	uint16_t maximum_clients_per_worker = CEILING(LEADERS_PER_MACHINE, ACTIVE_WORKERS_PER_MACHINE);
 	if ((ENABLE_LOCAL_WORKERS == 0) || (wrkr_lid < ACTIVE_WORKERS_PER_MACHINE)) {
-		for (qp_i = 0; qp_i < WORKER_NUM_UD_QPS; qp_i++) {
+		for (qp_i = 0; qp_i < FOLLOWER_QP_NUM; qp_i++) {
 			for (i = 0; i < WS_PER_WORKER; i++) {
 				uint16_t total_clients_per_qp = ENABLE_THREAD_PARTITIONING_C_TO_W == 1 ?
 												maximum_clients_per_worker * (MACHINE_NUM - 1) : clts_per_qp[qp_i];
@@ -95,8 +95,8 @@ void *run_worker(void *arg)
 	/* -----------------------------------------------------
 	--------------CONNECT WITH CLIENTS-----------------------
 	---------------------------------------------------------*/
-	char wrkr_dgram_qp_name[WORKER_NUM_UD_QPS][HRD_QP_NAME_SIZE];
-	for (qp_i = 0; qp_i < WORKER_NUM_UD_QPS; qp_i++) {
+	char wrkr_dgram_qp_name[FOLLOWER_QP_NUM][QP_NAME_SIZE];
+	for (qp_i = 0; qp_i < FOLLOWER_QP_NUM; qp_i++) {
 		sprintf(wrkr_dgram_qp_name[qp_i], "worker-dgram-%d-%d-%d", machine_id, wrkr_lid, qp_i);
 		hrd_publish_dgram_qp(cb[0], qp_i, wrkr_dgram_qp_name[qp_i], worker_sl); // need to do this per server_port, per UD QP
 	}
@@ -121,11 +121,11 @@ void *run_worker(void *arg)
 	struct ibv_recv_wr recv_wr[WORKER_MAX_BATCH], *bad_recv_wr;
 	struct ibv_sge recv_sgl[WORKER_MAX_BATCH];
 	long long rolling_iter = 0, local_nb_tx = 0, local_tot_tx = 0;
-	long long nb_tx_tot[WORKER_NUM_UD_QPS] = {0};
+	long long nb_tx_tot[FOLLOWER_QP_NUM] = {0};
 	int ws[LEADERS_PER_MACHINE] = {0}; // WINDOW SLOT (Push pointer) of local clients
 	int clt_i = -1;
 	uint16_t last_measured_wr_i = 0, resp_buf_i = 0, received_messages,
-			wr_i = 0, per_qp_received_messages[WORKER_NUM_UD_QPS] = {0};
+			wr_i = 0, per_qp_received_messages[FOLLOWER_QP_NUM] = {0};
 	struct mica_op* dbg_buffer = malloc(HERD_PUT_REQ_SIZE);
 	assert(LEADERS_PER_MACHINE % num_server_ports == 0);
 
@@ -137,7 +137,7 @@ void *run_worker(void *arg)
 	set_up_wrs(&response_buffer, resp_mr, cb[0], recv_sgl, recv_wr, wr, sgl, wrkr_lid);
 
 	qp_i = 0;
-	uint16_t send_qp_i = 0, per_recv_qp_wr_i[WORKER_NUM_UD_QPS] = {0};
+	uint16_t send_qp_i = 0, per_recv_qp_wr_i[FOLLOWER_QP_NUM] = {0};
 	uint32_t dbg_counter = 0;
 	uint8_t requests_per_message[WORKER_MAX_BATCH] = {0};
 	uint16_t send_wr_i;
@@ -169,8 +169,8 @@ void *run_worker(void *arg)
 		send_wr_i = 0;
 		memset(requests_per_message, 0, received_messages);
 		received_messages = 0;
-		memset(per_recv_qp_wr_i, 0, WORKER_NUM_UD_QPS * sizeof(uint16_t)); // how many wrs to send in each qp
-		memset(per_qp_received_messages, 0, WORKER_NUM_UD_QPS * sizeof(uint16_t)); // how many qps have actually been received in each qp
+		memset(per_recv_qp_wr_i, 0, FOLLOWER_QP_NUM * sizeof(uint16_t)); // how many wrs to send in each qp
+		memset(per_qp_received_messages, 0, FOLLOWER_QP_NUM * sizeof(uint16_t)); // how many qps have actually been received in each qp
 
 		while (wr_i < WORKER_MAX_BATCH) {
 			struct mica_op *next_req_ptr;
@@ -200,7 +200,7 @@ void *run_worker(void *arg)
 		}
 
 		if (wr_i == 0) {
-			w_stats[wrkr_lid].empty_polls_per_worker++;
+			f_stats[wrkr_lid].empty_polls_per_worker++;
 			continue; // no request was found, start over
 		}
 		KVS_BATCH_OP(&kv, wr_i, op_ptr_arr, mica_resp_arr);
@@ -213,7 +213,7 @@ void *run_worker(void *arg)
 									  wc, multiget, &debug_recv, wr_i,  wrkr_lid,  max_reqs);
 
 		//green_printf("No of reqs %d through %d messages \n", wr_i, send_wr_i);
-		//if (w_stats[wrkr_lid].batches_per_worker == 0 || w_stats[wrkr_lid].batches_per_worker == MILLION)
+		//if (f_stats[wrkr_lid].batches_per_worker == 0 || f_stats[wrkr_lid].batches_per_worker == MILLION)
 		//printf("Worker: %d Response %d bkt requested %llu \n", wrkr_lid, mica_resp_arr[0].type, op_ptr_arr[0]->key.bkt );
 		if ((ENABLE_WORKER_COALESCING == 1) &&  (ENABLE_ASSERTIONS == 1)) assert(send_wr_i == received_messages);
 		append_responses_to_work_requests_and_delete_requests(wr_i, op_ptr_arr, wr,

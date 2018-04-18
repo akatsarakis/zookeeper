@@ -562,10 +562,10 @@ int hrd_get_published(const char *key, void **value)
  */
 void hrd_publish_ready(const char *qp_name)
 {
-	char value[HRD_QP_NAME_SIZE];
-	assert(qp_name != NULL && strlen(qp_name) < HRD_QP_NAME_SIZE);
+	char value[QP_NAME_SIZE];
+	assert(qp_name != NULL && strlen(qp_name) < QP_NAME_SIZE);
 
-	char new_name[2 * HRD_QP_NAME_SIZE];
+	char new_name[2 * QP_NAME_SIZE];
 	sprintf(new_name, "%s", HRD_RESERVED_NAME_PREFIX);
 	strcat(new_name, qp_name);
 
@@ -580,10 +580,10 @@ void hrd_publish_ready(const char *qp_name)
 void hrd_wait_till_ready(const char *qp_name)
 {
 	char *value;
-	char exp_value[HRD_QP_NAME_SIZE];
+	char exp_value[QP_NAME_SIZE];
 	sprintf(exp_value, "%s", "hrd_ready");
 
-	char new_name[2 * HRD_QP_NAME_SIZE];
+	char new_name[2 * QP_NAME_SIZE];
 	sprintf(new_name, "%s", HRD_RESERVED_NAME_PREFIX);
 	strcat(new_name, qp_name);
 

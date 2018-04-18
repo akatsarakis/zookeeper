@@ -107,14 +107,22 @@ void multicast_testing(struct mcast_essentials*, int , struct hrd_ctrl_blk*);
 
 void createAHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb);
 void createAHs_for_worker(uint16_t, struct hrd_ctrl_blk*);
+// Follower calls this function to conenct with the leader
+void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb);
+// Leader calls this function to connect with its followers
+void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb);
+// Used by all kinds of threads to publish their QPs
+void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb);
 int* get_random_permutation(int n, int clt_gid, uint64_t *seed);
 int parse_trace(char* path, struct trace_command **cmds, int clt_gid);
+// Manufactures a trace without a file
+void manufacture_trace(struct trace_command **cmds, int g_id);
 void set_up_the_buffer_space(uint16_t[], uint32_t[], uint32_t[]);
-void trace_init(struct trace_command **cmds, int clt_gid);
+void trace_init(struct trace_command **cmds, int g_id);
 void init_multicast(struct mcast_info**, struct mcast_essentials**, int, struct hrd_ctrl_blk*, int);
 void set_up_queue_depths(int**, int**, int);
 // Connect with Workers and Clients
-void setup_client_conenctions_and_spawn_stats_thread(int clt_gid, struct hrd_ctrl_blk *cb);
+void setup_connections_and_spawn_stats_thread(int, struct hrd_ctrl_blk *);
 void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
                 struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid);
 void set_up_ops(struct extended_cache_op**, struct extended_cache_op**,
@@ -128,6 +136,8 @@ void post_coh_recvs(struct hrd_ctrl_blk*, int*, struct mcast_essentials*, int, v
 // Set up the memory registrations required in the client if there is no Inlining
 void set_up_mrs(struct ibv_mr**, struct ibv_mr**, struct extended_cache_op*, struct mica_op*,
 				struct hrd_ctrl_blk*);
+// Set up a struct that stores pending writes
+void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size);
 void set_up_credits(uint8_t[][MACHINE_NUM], struct ibv_send_wr*, struct ibv_sge*,
 					struct ibv_recv_wr*, struct ibv_sge*, struct hrd_ctrl_blk*, int);
 // Set up the remote Requests send and recv WRs
@@ -144,10 +154,13 @@ void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 ---------------------------------------------------------------------------*/
 // check if the given protocol is invalid
 void check_protocol(int);
-// pin a worker thread to a core
-int pin_worker(int w_id);
-// pin a client thread to a core
-int pin_client(int c_id);
+// pin threads starting from core 0
+int pin_thread(int t_id);
+// pin a thread avoid collisions with pin_thread()
+int pin_threads_avoiding_collisions(int c_id);
+
+
+
 
 
 #endif /* ARMONIA_UTILS_H */

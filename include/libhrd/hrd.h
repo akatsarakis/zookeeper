@@ -33,6 +33,7 @@
 #include <byteswap.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <stdbool.h>
 // <vasilis>
 
 #define HRD_Q_DEPTH 0	/* Used only by wrappers we do not care about */
@@ -45,7 +46,7 @@
 #define HRD_DEFAULT_QKEY 0x11111111
 #define HRD_MAX_LID 256
 
-#define HRD_QP_NAME_SIZE 200	/* Size (in bytes) of a queue pair name */
+#define QP_NAME_SIZE 200	/* Size (in bytes) of a queue pair name */
 #define HRD_RESERVED_NAME_PREFIX "__HRD_RESERVED_NAME_PREFIX"
 
 #define HRD_CONNECT_IB_ATOMICS 0
@@ -159,10 +160,11 @@
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
-int is_roce, is_master, is_client;
-int machine_id, machines_num;
+int is_roce;
+int machine_id, num_threads;
+bool is_leader;
 char *remote_IP, *local_IP;
-int remote_id;
+
 
 // returns the number of remote IP addresses and fills the remoteIPs array with them
 int getRemoteIPs(char***);
@@ -170,7 +172,7 @@ void die(const char *);
 
 /* Registry info about a QP */
 struct hrd_qp_attr {
-	char name[HRD_QP_NAME_SIZE];
+	char name[QP_NAME_SIZE];
 
 	// ROCE
 	uint64_t gid_global_interface_id;	// Store the gid fields separately because I

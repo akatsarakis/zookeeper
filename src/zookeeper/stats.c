@@ -7,14 +7,16 @@ void *print_stats(void* no_arg)
     uint16_t i, print_count = 0;
     long long all_clients_cache_hits = 0, all_workers_remotes = 0, all_workers_locals = 0;
     double total_throughput = 0, all_clients_throughput = 0, all_workers_throughput = 0;
-    double worker_throughput[FOLLOWERS_PER_MACHINE];
+//    double worker_throughput[FOLLOWERS_PER_MACHINE];
     int sleep_time = 20;
-    struct client_stats curr_c_stats[LEADERS_PER_MACHINE], prev_c_stats[LEADERS_PER_MACHINE];
-    struct worker_stats curr_w_stats[FOLLOWERS_PER_MACHINE], prev_w_stats[FOLLOWERS_PER_MACHINE];
+    struct thread_stats *curr_c_stats, *prev_c_stats;
+    curr_c_stats = (struct thread_stats*) malloc(num_threads * sizeof(struct thread_stats));
+    prev_c_stats = (struct thread_stats*) malloc(num_threads * sizeof(struct thread_stats));
+//    struct follower_stats curr_w_stats[FOLLOWERS_PER_MACHINE], prev_w_stats[FOLLOWERS_PER_MACHINE];
     struct stats all_stats;
     sleep(4);
-    memcpy(prev_c_stats, (void*) c_stats, LEADERS_PER_MACHINE * (sizeof(struct client_stats)));
-    memcpy(prev_w_stats, (void*) w_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct worker_stats)));
+    memcpy(prev_c_stats, (void*) t_stats, num_threads * (sizeof(struct thread_stats)));
+//    memcpy(prev_w_stats, (void*) f_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
     while(true) {
@@ -22,9 +24,9 @@ void *print_stats(void* no_arg)
         clock_gettime(CLOCK_REALTIME, &end);
         double seconds = (end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec) / 1000000001;
         start = end;
-        memcpy(curr_c_stats, (void*) c_stats, LEADERS_PER_MACHINE * (sizeof(struct client_stats)));
-        memcpy(curr_w_stats, (void*) w_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct worker_stats)));
-        all_clients_cache_hits = 0; all_workers_remotes = 0; all_workers_locals = 0;
+        memcpy(curr_c_stats, (void*) t_stats, num_threads * (sizeof(struct thread_stats)));
+//        memcpy(curr_w_stats, (void*) f_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
+        all_clients_cache_hits = 0;  // all_workers_remotes = 0; all_workers_locals = 0;
         print_count++;
         if (EXIT_ON_PRINT == 1 && print_count == PRINT_NUM) {
             if (MEASURE_LATENCY && machine_id == 0) print_latency_stats();
@@ -34,9 +36,9 @@ void *print_stats(void* no_arg)
             exit(0);
         }
         seconds *= MILLION; // compute only MIOPS
-        for (i = 0; i < LEADERS_PER_MACHINE; i++) {
-            all_clients_cache_hits += curr_c_stats[i].cache_hits_per_client - prev_c_stats[i].cache_hits_per_client;
-            all_stats.cache_hits_per_client[i] = (curr_c_stats[i].cache_hits_per_client - prev_c_stats[i].cache_hits_per_client) / seconds;
+        for (i = 0; i < num_threads; i++) {
+            all_clients_cache_hits += curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread;
+            all_stats.cache_hits_per_client[i] = (curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread) / seconds;
             all_stats.remotes_per_client[i] = (curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client) / seconds;
             all_stats.locals_per_client[i] = (curr_c_stats[i].locals_per_client - prev_c_stats[i].locals_per_client) / seconds;
             all_stats.updates_per_client[i] = (curr_c_stats[i].updates_per_client - prev_c_stats[i].updates_per_client) / seconds;
@@ -66,42 +68,22 @@ void *print_stats(void* no_arg)
                 all_stats.empty_reqs_per_client[i] =  (curr_c_stats[i].tot_empty_reqs_per_trace - prev_c_stats[i].tot_empty_reqs_per_trace) / total_loops ;
         }
 
-        // PER WORKER STATS
-        for (i = 0; i < FOLLOWERS_PER_MACHINE; i++) {
-            all_workers_remotes += curr_w_stats[i].remotes_per_worker - prev_w_stats[i].remotes_per_worker;
-            all_workers_locals += curr_w_stats[i].locals_per_worker - prev_w_stats[i].locals_per_worker;
-            worker_throughput[i] = (curr_w_stats[i].remotes_per_worker - prev_w_stats[i].remotes_per_worker +
-                                    curr_w_stats[i].locals_per_worker - prev_w_stats[i].locals_per_worker) / seconds;
 
-            all_stats.remotes_per_worker[i] = (curr_w_stats[i].remotes_per_worker - prev_w_stats[i].remotes_per_worker) / seconds;
-            all_stats.locals_per_worker[i] = (curr_w_stats[i].locals_per_worker - prev_w_stats[i].locals_per_worker) / seconds;
-            if (curr_w_stats[i].batches_per_worker - prev_w_stats[i].batches_per_worker > 0) {
-                all_stats.batch_size_per_worker[i] = (curr_w_stats[i].remotes_per_worker - prev_w_stats[i].remotes_per_worker) /
-                                                     (double) (curr_w_stats[i].batches_per_worker - prev_w_stats[i].batches_per_worker);
-                all_stats.aver_reqs_polled_per_worker[i] = (curr_w_stats[i].remotes_per_worker - prev_w_stats[i].remotes_per_worker) /
-                                                           (double) (curr_w_stats[i].empty_polls_per_worker - prev_w_stats[i].empty_polls_per_worker +
-                                                                     curr_w_stats[i].batches_per_worker - prev_w_stats[i].batches_per_worker);
-            }
-            else {
-                all_stats.batch_size_per_worker[i] = 0;
-                all_stats.aver_reqs_polled_per_worker[i] = 0;
-            }
-        }
 
-        memcpy(prev_c_stats, curr_c_stats, LEADERS_PER_MACHINE * (sizeof(struct client_stats)));
-        memcpy(prev_w_stats, curr_w_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct worker_stats)));
-        total_throughput = (all_clients_cache_hits + all_workers_remotes + all_workers_locals) / seconds;
+        memcpy(prev_c_stats, curr_c_stats, num_threads * (sizeof(struct thread_stats)));
+//        memcpy(prev_w_stats, curr_w_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
+        total_throughput = (all_clients_cache_hits) / seconds;
         all_clients_throughput = all_clients_cache_hits / seconds;
-        all_workers_throughput = (all_workers_remotes + all_workers_locals) / seconds;
+//        all_workers_throughput = (all_workers_remotes + all_workers_locals) / seconds;
         printf("---------------PRINT %d time elapsed %.2f---------------\n", print_count, seconds / MILLION);
-        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f WORKER: MIOPS: %.2f \n",
-                     total_throughput, all_clients_throughput, all_workers_throughput);
-        for (i = 0; i < LEADERS_PER_MACHINE; i++) {
+        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f  \n",
+                     total_throughput, all_clients_throughput);
+        for (i = 0; i < num_threads; i++) {
             double cacheHitRate;
             double trace_ratio;
-            long long total_reqs = curr_c_stats[i].cache_hits_per_client + curr_c_stats[i].remotes_per_client + curr_c_stats[i].locals_per_client;
+            long long total_reqs = curr_c_stats[i].cache_hits_per_thread + curr_c_stats[i].remotes_per_client + curr_c_stats[i].locals_per_client;
             if (total_reqs > 0)
-                trace_ratio =  curr_c_stats[i].cache_hits_per_client / (double)total_reqs;
+                trace_ratio =  curr_c_stats[i].cache_hits_per_thread / (double)total_reqs;
             if (all_stats.remotes_per_client[i] > 0)
                 cacheHitRate = all_stats.cache_hits_per_client[i] / (all_stats.cache_hits_per_client[i] + all_stats.remotes_per_client[i] + all_stats.locals_per_client[i]);
             yellow_printf("C%d: %.2f MIOPS-Batch %.2f(%.2f) -H %.2f -W %llu -E %.2f -AC %.2f  ", i, all_stats.cache_hits_per_client[i], all_stats.batch_size_per_client[i],
@@ -110,19 +92,14 @@ void *print_stats(void* no_arg)
             if  (i > 0 && i % 2 == 0) printf("\n");
         }
         printf("\n");
-        for (i = 0; i < FOLLOWERS_PER_MACHINE; i++) {
-            cyan_printf("WORKER %d: TOTAL: %.2f MIOPS, REMOTES: %.2f MIOPS, LOCALS: %.2f MIOPS, Batch %.2f(%.2f) \n",
-                        i, worker_throughput[i], all_stats.remotes_per_worker[i], all_stats.locals_per_worker[i], all_stats.batch_size_per_worker[i],
-                        all_stats.aver_reqs_polled_per_worker[i]);
-        }
         printf("---------------------------------------\n");
         if(ENABLE_CACHE_STATS == 1)
             print_cache_stats(start, machine_id);
         // // Write to a file all_clients_throughput, per_worker_remote_throughput[], per_worker_local_throughput[]
         if(DUMP_STATS_2_FILE == 1)
             dump_stats_2_file(&all_stats);
-        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f WORKER: MIOPS: %.2f \n",
-                     total_throughput, all_clients_throughput, all_workers_throughput);
+        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f \n",
+                     total_throughput, all_clients_throughput);
 
     }
 }
@@ -252,10 +229,10 @@ void print_latency_stats(void){
             DISABLE_CACHE == 1 ? "BS" : exectype[protocol],
             LOAD_BALANCE == 1 ? "UNIF" : "SKEW",
             EMULATING_CREW == 1 ? "CREW" : "EREW",
-            DISABLE_CACHE == 0 && protocol == 2 && ENABLE_MULTIPLE_SESSIONS != 0 && SESSIONS_PER_CLIENT != 0 ? SESSIONS_PER_CLIENT: 0,
+            DISABLE_CACHE == 0 && protocol == 2 && ENABLE_MULTIPLE_SESSIONS != 0 && SESSIONS_PER_THREAD != 0 ? SESSIONS_PER_THREAD: 0,
             SKEW_EXPONENT_A,
             USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + BASE_VALUE_SIZE): BASE_VALUE_SIZE,
-            MACHINE_NUM, LEADERS_PER_MACHINE,
+            MACHINE_NUM, num_threads,
             FOLLOWERS_PER_MACHINE, WRITE_RATIO,
             BALANCE_HOT_WRITES == 1  ? "_lbw" : "",
             CACHE_BATCH_SIZE);

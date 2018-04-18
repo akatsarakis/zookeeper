@@ -579,7 +579,7 @@ void hrd_publish_conn_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name)
 	assert(n >= 0);
     assert(n < cb->num_conn_qps);
 
-	assert(qp_name != NULL && strlen(qp_name) < HRD_QP_NAME_SIZE - 1);
+	assert(qp_name != NULL && strlen(qp_name) < QP_NAME_SIZE - 1);
 	assert(strstr(qp_name, HRD_RESERVED_NAME_PREFIX) == NULL);
 
 	int len = strlen(qp_name);
@@ -619,7 +619,7 @@ void hrd_publish_dgram_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name, u
 	assert(cb != NULL);
 	assert(n >= 0 && n < cb->num_dgram_qps);
 
-	assert(qp_name != NULL && strlen(qp_name) < HRD_QP_NAME_SIZE - 1);
+	assert(qp_name != NULL && strlen(qp_name) < QP_NAME_SIZE - 1);
 	assert(strstr(qp_name, HRD_RESERVED_NAME_PREFIX) == NULL);
 
 	int len = strlen(qp_name);
@@ -654,7 +654,7 @@ void hrd_publish_dgram_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name, u
 struct hrd_qp_attr* hrd_get_published_qp(const char *qp_name)
 {
 	struct hrd_qp_attr *ret;
-	assert(qp_name != NULL && strlen(qp_name) < HRD_QP_NAME_SIZE - 1);
+	assert(qp_name != NULL && strlen(qp_name) < QP_NAME_SIZE - 1);
 	assert(strstr(qp_name, HRD_RESERVED_NAME_PREFIX) == NULL);
 
 	int len = strlen(qp_name);
