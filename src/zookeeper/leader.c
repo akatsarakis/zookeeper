@@ -8,6 +8,7 @@ void *leader(void *arg)
 	struct thread_params params = *(struct thread_params *) arg;
 	uint16_t t_id = params.id;
 	uint16_t follower_qp_i = t_id % FOLLOWER_QP_NUM;
+  uint16_t follower_id = t_id;
 
 	if (ENABLE_MULTICAST == 1 && t_id == 0) {
 		red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
@@ -43,7 +44,7 @@ void *leader(void *arg)
 	}
 	/* Fill the RECV queue that receives the Broadcasts, we need to do this early */
 	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
-		post_coh_recvs(cb, &push_ptr, mcast, protocol, (void*)incoming_reqs);
+		pre_post_recvs(cb, &push_ptr, mcast, (void*)incoming_reqs, LEADER_BUF_SLOTS, LDR_PREPOST_RECEIVES_NUM);
 
 	/* -----------------------------------------------------
 	--------------CONNECT WITH FOLLOWERS-----------------------
@@ -55,14 +56,13 @@ void *leader(void *arg)
 	--------------DECLARATIONS------------------------------
 	---------------------------------------------------------*/
 	int key_i, ret;
-	struct ibv_send_wr rem_send_wr[WINDOW_SIZE], ack_wr[BCAST_TO_CACHE_BATCH], coh_send_wr[MESSAGES_IN_BCAST_BATCH],
-			credit_send_wr[MAX_CREDIT_WRS], *bad_send_wr;
-	struct ibv_sge rem_send_sgl[WINDOW_SIZE], ack_sgl[BCAST_TO_CACHE_BATCH], coh_send_sgl[MAX_BCAST_BATCH], credit_sgl;
-	struct ibv_wc wc[MAX_REMOTE_RECV_WCS], coh_wc[MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
-	struct ibv_recv_wr rem_recv_wr[WINDOW_SIZE], coh_recv_wr[MAX_COH_RECEIVES],
-			credit_recv_wr[MAX_CREDIT_RECVS], *bad_recv_wr;
+	struct ibv_send_wr  coh_send_wr[MESSAGES_IN_BCAST_BATCH], credit_send_wr[MAX_CREDIT_WRS], *bad_send_wr;
+	struct ibv_sge coh_send_sgl[MAX_BCAST_BATCH], credit_sgl;
+	struct ibv_wc coh_wc[MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
+	struct ibv_recv_wr coh_recv_wr[MAX_COH_RECEIVES], credit_recv_wr[MAX_CREDIT_RECVS], *bad_recv_wr;
 	struct ibv_sge rem_recv_sgl, coh_recv_sgl[MAX_COH_RECEIVES], credit_recv_sgl;
-	struct coalesce_inf coalesce_struct[MACHINE_NUM] = {0};
+
+  struct coalesce_inf coalesce_struct[MACHINE_NUM] = {0};
 	uint8_t credits_for_invs[MACHINE_NUM], credits_for_acks[MACHINE_NUM], credits_for_upds[MACHINE_NUM],
 			credits[VIRTUAL_CHANNELS][MACHINE_NUM], per_worker_outstanding[FOLLOWER_NUM] = {0};
 	uint16_t wn = 0, rm_id = 0, wr_i = 0, br_i = 0, cb_i = 0, coh_message_count[VIRTUAL_CHANNELS][MACHINE_NUM],
@@ -117,12 +117,11 @@ void *leader(void *arg)
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
 		---------------------------------------------------------------------------*/
-	// SEND AND RECEIVE WRs
-	set_up_remote_WRs(rem_send_wr, rem_send_sgl, rem_recv_wr, &rem_recv_sgl, cb, t_id, ops_mr, protocol);
+
 	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
 		set_up_credits(credits, credit_send_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-		set_up_coh_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
-					   ack_wr, ack_sgl, coh_buf, t_id, cb, coh_mr, mcast, protocol);
+		set_up_ldr_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
+                   coh_buf, t_id, follower_id, cb, coh_mr, mcast, protocol);
 	}
 	// TRACE
 	struct trace_command *trace;

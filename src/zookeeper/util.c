@@ -847,7 +847,6 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
     check_protocol(protocol);
     //BROADCAST WRs and credit Receives
     for (j = 0; j < MAX_BCAST_BATCH; j++) {
-        if (protocol == FOLLOWER) coh_send_sgl[j].length = HERD_PUT_REQ_SIZE;
         //coh_send_sgl[j].addr = (uint64_t) (uintptr_t) (coh_buf + j);
         if (LEADER_ENABLE_INLINING == 0) coh_send_sgl[j].lkey = coh_mr->lkey;
         for (i = 0; i < MESSAGES_IN_BCAST; i++) {
@@ -986,6 +985,109 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
             wr[i].imm_data = (uint32) (machine_id * FOLLOWERS_PER_MACHINE) + wrkr_lid;
     }
 }
+
+/* ---------------------------------------------------------------------------
+------------------------------LEADER --------------------------------------
+---------------------------------------------------------------------------*/
+
+// Prepost Receives on the Leader Side
+// Post receives for the coherence traffic in the init phase
+void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essentials *mcast, void* buf,
+                    uint32_t max_reqs, uint32_t number_of_recvs)
+{
+  uint32_t i;//, j;
+  for(i = 0; i < number_of_recvs; i++) {
+      if (ENABLE_MULTICAST == 1) {
+        hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
+                            UD_REQ_SIZE, mcast->recv_mr->lkey);
+      }
+      else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
+                               (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
+      HRD_MOD_ADD(*push_ptr, max_reqs);
+  }
+}
+
+
+// Set up all leader WRs
+void set_up_ldr_WRs(struct ibv_send_wr *send_wr, struct ibv_sge *send_sgl,
+                    struct ibv_recv_wr *recv_wr, struct ibv_sge *recv_sgl,
+                    struct mica_op *buf, uint16_t t_id, uint16_t remote_thread,
+                    struct hrd_ctrl_blk *cb, struct ibv_mr *mr,
+                    struct mcast_essentials *mcast, int protocol)
+{
+  uint16_t i, j;
+  //BROADCAST WRs and credit Receives
+  for (j = 0; j < MAX_BCAST_BATCH; j++) { // Number of Broadcasts
+    //send_sgl[j].addr = (uint64_t) (uintptr_t) (buf + j);
+    if (LEADER_ENABLE_INLINING == 0) send_sgl[j].lkey = mr->lkey;
+    for (i = 0; i < MESSAGES_IN_BCAST; i++) {
+      uint16_t rm_id = i;
+      uint16_t index = (j * MESSAGES_IN_BCAST) + i;
+      assert (index < MESSAGES_IN_BCAST_BATCH);
+      if (ENABLE_MULTICAST == 1) {
+        send_wr[index].wr.ud.ah = mcast->send_ah;
+        send_wr[index].wr.ud.remote_qpn = mcast->qpn;
+        send_wr[index].wr.ud.remote_qkey = mcast->qkey;
+      }
+      else {
+        send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][BROADCAST_UD_QP_ID].ah;
+        send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][BROADCAST_UD_QP_ID].qpn;
+        send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+      }
+      send_wr[index].opcode = IBV_WR_SEND;
+      send_wr[index].num_sge = 1;
+      send_wr[index].sg_list = &send_sgl[j];
+      if (LEADER_ENABLE_INLINING == 1) send_wr[index].send_flags = IBV_SEND_INLINE;
+      send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &send_wr[index + 1];
+    }
+  }
+
+  // Coherence Receives
+  int max_coh_receives = protocol == FOLLOWER ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
+  for (i = 0; i < max_coh_receives; i++) {
+    recv_sgl[i].length = UD_REQ_SIZE;
+    if (protocol == FOLLOWER && ENABLE_MULTICAST == 1)
+      recv_sgl[i].lkey = mcast->recv_mr->lkey;
+    else  recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+    recv_wr[i].sg_list = &recv_sgl[i];
+    recv_wr[i].num_sge = 1;
+  }
+}
+
+
+// Set up all Follower WRs
+void set_up_follower_WRs(struct ibv_send_wr *send_wr, struct ibv_sge *send_sgl,
+                    struct ibv_recv_wr *recv_wr, struct ibv_sge *recv_sgl,
+                    struct ibv_send_wr *ack_wr, struct ibv_sge *ack_sgl,
+                    struct mica_op *buf, uint16_t t_id, uint16_t remote_thread,
+                    struct hrd_ctrl_blk *cb, struct ibv_mr *mr,
+                    struct mcast_essentials *mcast, int protocol)
+{
+
+
+  uint16_t i, j;
+
+
+  if (protocol == FOLLOWER) {
+    send_wr[i].wr.ud.ah = remote_leader_qp[remote_thread][BROADCAST_UD_QP_ID].ah;
+    send_wr[i].wr.ud.remote_qpn = (uint32) remote_leader_qp[remote_thread][BROADCAST_UD_QP_ID].qpn;
+  }
+  if (protocol == FOLLOWER) send_wr[i].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
+  if (protocol == FOLLOWER) send_wr[i].imm_data = (uint32) machine_id;
+  // Do acknowledgements
+  if (protocol == FOLLOWER) {
+    // ACK WRs
+    for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
+      ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+      //ack_wr[i].imm_data = machine_id;
+      ack_sgl[i].length = HERD_GET_REQ_SIZE;
+      ack_wr[i].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
+      ack_wr[i].num_sge = 1;
+      ack_wr[i].sg_list = &ack_sgl[i];
+    }
+  }
+}
+
 
 /* ---------------------------------------------------------------------------
 ------------------------------UTILITY --------------------------------------

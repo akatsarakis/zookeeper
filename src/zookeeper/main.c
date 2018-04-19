@@ -56,6 +56,7 @@ int main(int argc, char *argv[])
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
 	assert(sizeof(struct key) == 8);
+  assert(LEADERS_PER_MACHINE == FOLLOWERS_PER_MACHINE); // hopefully temporary restriction
 	int i, c;
 	num_threads = -1;
 	is_roce = -1; machine_id = -1;

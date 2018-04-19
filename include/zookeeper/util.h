@@ -148,6 +148,17 @@ void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 					struct ibv_send_wr*, struct ibv_sge*, struct mica_op*, uint16_t,
 					struct hrd_ctrl_blk*, struct ibv_mr*, struct mcast_essentials*, int);
 
+/* ---------------------------------------------------------------------------
+------------------------------LEADER--------------------------------------
+---------------------------------------------------------------------------*/
+
+// Set up all leader WRs
+void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
+                    struct mica_op*, uint16_t, uint16_t, struct hrd_ctrl_blk*, struct ibv_mr*,
+                    struct mcast_essentials*, int);
+// Post receives for the coherence traffic in the init phase
+void pre_post_recvs(struct hrd_ctrl_blk*, int* , struct mcast_essentials*, void*,
+                    uint32_t, uint32_t);
 
 /* ---------------------------------------------------------------------------
 ------------------------------UTILITY --------------------------------------
