@@ -36,7 +36,8 @@ set(SOURCE_FILES
         include/mica/city.h
         include/mica/mica.h
         #optik
-        include/optik/optik_mod.h)
+        include/optik/optik_mod.h
+        /usr/include/infiniband/verbs.h)
 
 
 

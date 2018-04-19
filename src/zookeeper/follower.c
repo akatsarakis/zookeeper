@@ -17,20 +17,21 @@ void *follower(void *arg)
     }
     int protocol = FOLLOWER;
 
-    uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
-                                (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE ;
+
     int *recv_q_depths, *send_q_depths;
-    set_up_queue_depths(&recv_q_depths, &send_q_depths, protocol);
+    set_up_queue_depths_ldr_flr(&recv_q_depths, &send_q_depths, protocol);
     struct hrd_ctrl_blk *cb = hrd_ctrl_blk_init(t_id,	/* local_hid */
                                                 0, -1, /* port_index, numa_node_id */
                                                 0, 0,	/* #conn qps, uc */
                                                 NULL, 0, -1,	/* prealloc conn buf, buf size, key */
-                                                LEADER_QP_NUM, remote_buf_size + LIN_CLT_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
+                                                LEADER_QP_NUM, LEADER_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
                                                 MASTER_SHM_KEY + FOLLOWERS_PER_MACHINE + t_id, /* key */
                                                 recv_q_depths, send_q_depths); /* Depth of the dgram RECV Q*/
 
     int push_ptr = 0, pull_ptr = -1;
-    struct ud_req *incoming_reqs = (struct ud_req *)(cb->dgram_buf + remote_buf_size);
+    struct ud_req *ack_buffer = (struct ud_req *)(cb->dgram_buf);
+    struct ud_req *w_buffer = (struct ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+
     /* ---------------------------------------------------------------------------
     ------------------------------MULTICAST SET UP-------------------------------
     ---------------------------------------------------------------------------*/
@@ -44,7 +45,7 @@ void *follower(void *arg)
     }
     /* Fill the RECV queue that receives the Broadcasts, we need to do this early */
     if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
-        post_coh_recvs(cb, &push_ptr, mcast, protocol, (void*)incoming_reqs);
+        post_coh_recvs(cb, &push_ptr, mcast, protocol, (void*)ack_buffer);
 
     /* -----------------------------------------------------
     --------------CONNECT WITH FOLLOWERS-----------------------
@@ -169,7 +170,7 @@ void *follower(void *arg)
         ack_ops_i = 0;
         uint16_t polled_messages = 0;
         if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-            poll_coherence_LIN(&update_ops_i, incoming_reqs, &pull_ptr, update_ops, t_id, t_id,
+            poll_coherence_LIN(&update_ops_i, ack_buffer, &pull_ptr, update_ops, t_id, t_id,
                                ack_size, &polled_messages, ack_ops_i, inv_size, &inv_ops_i, inv_ops);
         }
 		/* ---------------------------------------------------------------------------
@@ -241,7 +242,7 @@ void *follower(void *arg)
 											cb, coh_recv_cq, coh_wc);
 			if (credit_wr_i > 0)
 				send_credits(credit_wr_i, coh_recv_sgl, cb, &push_ptr, coh_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
-							 credit_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)incoming_reqs);
+							 credit_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)ack_buffer);
 		}
         op_i = 0; bool is_leader_t = false;
         run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);

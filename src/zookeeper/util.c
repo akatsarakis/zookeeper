@@ -950,7 +950,8 @@ void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_s
 ------------------------------WORKER INITIALIZATION --------------------------
 ---------------------------------------------------------------------------*/
 
-void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
+void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr,
+                struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
                 struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid)
 {
     uint16_t i;
@@ -989,6 +990,42 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER --------------------------------------
 ---------------------------------------------------------------------------*/
+
+// set the different queue depths for client's queue pairs
+void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int protocol)
+{
+  /* -------LEADER-------------
+  * 1st Dgram send Prepares -- receive ACKs
+  * 2nd Dgram send Commits  -- receive Writes
+  * 3rd Dgram send Credits  -- receive Credits
+  *
+    * ------FOLLOWER-----------
+  * 1st Dgram receive prepares -- send Acks
+  * 2nd Dgram receive Commits  -- send Writes
+  * 3rd Dgram receive Credits  -- send Credits
+  * */
+  if (protocol == FOLLOWER) {
+    *send_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
+    *recv_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
+    (*recv_q_depths)[PREP_ACK_QP_ID] = FLR_RECV_PREP_Q_DEPTH;
+    (*recv_q_depths)[COMMIT_W_QP_ID] = FLR_RECV_COM_Q_DEPTH;
+    (*recv_q_depths)[FC_QP_ID] = FLR_RECV_CR_Q_DEPTH;
+    (*send_q_depths)[PREP_ACK_QP_ID] = FLR_SEND_ACK_Q_DEPTH;
+    (*send_q_depths)[COMMIT_W_QP_ID] = FLR_SEND_W_Q_DEPTH;
+    (*send_q_depths)[FC_QP_ID] = FLR_SEND_CR_Q_DEPTH;
+  }
+  else if (protocol == LEADER) {
+    *send_q_depths = malloc(LEADER_QP_NUM * sizeof(int));
+    *recv_q_depths = malloc(LEADER_QP_NUM * sizeof(int));
+    (*recv_q_depths)[PREP_ACK_QP_ID] = LDR_RECV_ACK_Q_DEPTH;
+    (*recv_q_depths)[COMMIT_W_QP_ID] = LDR_RECV_W_Q_DEPTH;
+    (*recv_q_depths)[FC_QP_ID] = LDR_RECV_CR_Q_DEPTH;
+    (*send_q_depths)[PREP_ACK_QP_ID] = LDR_SEND_PREP_Q_DEPTH;
+    (*send_q_depths)[COMMIT_W_QP_ID] = LDR_SEND_COM_Q_DEPTH;
+    (*send_q_depths)[FC_QP_ID] = LDR_SEND_CR_Q_DEPTH;
+  }
+  else check_protocol(protocol);
+}
 
 // Prepost Receives on the Leader Side
 // Post receives for the coherence traffic in the init phase
@@ -1051,6 +1088,45 @@ void set_up_ldr_WRs(struct ibv_send_wr *send_wr, struct ibv_sge *send_sgl,
     else  recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
     recv_wr[i].sg_list = &recv_sgl[i];
     recv_wr[i].num_sge = 1;
+  }
+}
+
+// The Leader sends credits to the followers when it receives their writes
+// and it receives credits for its commit messages
+void set_up_ldr_credits(uint8_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
+                        struct ibv_sge* credit_send_sgl, struct ibv_recv_wr* credit_recv_wr,
+                        struct ibv_sge* credit_recv_sgl, struct hrd_ctrl_blk *cb, int protocol,
+                        uint32_t max_credit_wrs, uint32_t max_credit_recvs)
+{
+  int i = 0;
+//  int max_credt_wrs = protocol == FOLLOWER ?  SC_MAX_CREDIT_WRS : MAX_CREDIT_WRS;
+//  int max_credit_recvs = protocol == FOLLOWER ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
+  // Credits
+  if (protocol == FOLLOWER)
+    for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
+  else {
+    for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
+      credits[PREP_VC][i] = PREPARE_CREDITS;
+      credits[COMM_VC][i] = COMMIT_CREDITS;
+    }
+  }
+  // Credit WRs
+  for (i = 0; i < max_credt_wrs; i++) {
+    credit_send_sgl->length = 0;
+    credit_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
+    credit_send_wr[i].num_sge = 0;
+    credit_send_wr[i].sg_list = credit_send_sgl;
+    credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+    credit_send_wr[i].next = NULL;
+    credit_send_wr[i].send_flags = IBV_SEND_INLINE;
+  }
+  //Credit Receives
+  credit_recv_sgl->length = 64;
+  credit_recv_sgl->lkey = cb->dgram_buf_mr->lkey;
+  credit_recv_sgl->addr = (uintptr_t) &cb->dgram_buf[0];
+  for (i = 0; i < max_credit_recvs; i++) {
+    credit_recv_wr[i].sg_list = credit_recv_sgl;
+    credit_recv_wr[i].num_sge = 1;
   }
 }
 

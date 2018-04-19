@@ -115,8 +115,8 @@ void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb);
 void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb);
 int* get_random_permutation(int n, int clt_gid, uint64_t *seed);
 int parse_trace(char* path, struct trace_command **cmds, int clt_gid);
-// Manufactures a trace without a file
-void manufacture_trace(struct trace_command **cmds, int g_id);
+
+
 void set_up_the_buffer_space(uint16_t[], uint32_t[], uint32_t[]);
 void trace_init(struct trace_command **cmds, int g_id);
 void init_multicast(struct mcast_info**, struct mcast_essentials**, int, struct hrd_ctrl_blk*, int);
@@ -159,6 +159,11 @@ void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 // Post receives for the coherence traffic in the init phase
 void pre_post_recvs(struct hrd_ctrl_blk*, int* , struct mcast_essentials*, void*,
                     uint32_t, uint32_t);
+// Manufactures a trace without a file
+void manufacture_trace(struct trace_command **cmds, int g_id);
+
+//Set up the depths of all QPs
+void set_up_queue_depths_ldr_flr(int**, int**, int);
 
 /* ---------------------------------------------------------------------------
 ------------------------------UTILITY --------------------------------------

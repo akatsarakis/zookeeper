@@ -57,6 +57,8 @@ int main(int argc, char *argv[])
 	assert(sizeof(struct write_op) % 64 == 0);
 	assert(sizeof(struct key) == 8);
   assert(LEADERS_PER_MACHINE == FOLLOWERS_PER_MACHINE); // hopefully temporary restriction
+  assert((W_CREDITS % LDR_CREDIT_DIVIDER) == 0); // division better be perfect
+  assert((COMMIT_CREDITS % FLR_CREDIT_DIVIDER) == 0); // division better be perfect
 	int i, c;
 	num_threads = -1;
 	is_roce = -1; machine_id = -1;

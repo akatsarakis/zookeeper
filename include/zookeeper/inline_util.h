@@ -1444,7 +1444,7 @@ static inline void debug_stalling_LIN(uint16_t stalled_ops_i, uint32_t *stalled_
 /* ---------------------------------------------------------------------------
 //------------------------------ LEADER SPECIFIC -----------------------------
 //---------------------------------------------------------------------------*/
-static inline int leader_batch_from_trace_to_cache(int trace_iter, uint32_t t_id, struct trace_command *trace,
+static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t_id, struct trace_command *trace,
                                                    struct extended_cache_op *ops,
                                                    struct pending_writes *p_writes, struct mica_resp * resp,
                                                    struct latency_flags* latency_info, struct timespec* start)
@@ -1650,7 +1650,7 @@ static inline void post_recvs_and_batch_bcasts_to_NIC(uint16_t br_i, struct hrd_
   }
 }
 
-// Post Receives
+// Post Receives for acknowledgements
 static inline void post_recvs(struct ibv_sge* recv_sgl,
                               int* push_ptr, struct ibv_recv_wr* recv_wr,
                               struct ibv_qp* recv_qp, uint32_t buf_slots,

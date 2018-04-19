@@ -20,7 +20,7 @@ void *leader(void *arg)
 	uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
 								(GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE ;
 	int *recv_q_depths, *send_q_depths;
-	set_up_queue_depths(&recv_q_depths, &send_q_depths, protocol);
+  set_up_queue_depths_ldr_flr(&recv_q_depths, &send_q_depths, protocol);
 	struct hrd_ctrl_blk *cb = hrd_ctrl_blk_init(t_id,	/* local_hid */
 												0, -1, /* port_index, numa_node_id */
 												0, 0,	/* #conn qps, uc */
@@ -55,28 +55,33 @@ void *leader(void *arg)
 	/* -----------------------------------------------------
 	--------------DECLARATIONS------------------------------
 	---------------------------------------------------------*/
-	int key_i, ret;
-	struct ibv_send_wr  coh_send_wr[MESSAGES_IN_BCAST_BATCH], credit_send_wr[MAX_CREDIT_WRS], *bad_send_wr;
-	struct ibv_sge coh_send_sgl[MAX_BCAST_BATCH], credit_sgl;
-	struct ibv_wc coh_wc[MAX_COH_RECEIVES], signal_send_wc, credit_wc[MAX_CREDIT_WRS];
-	struct ibv_recv_wr coh_recv_wr[MAX_COH_RECEIVES], credit_recv_wr[MAX_CREDIT_RECVS], *bad_recv_wr;
-	struct ibv_sge rem_recv_sgl, coh_recv_sgl[MAX_COH_RECEIVES], credit_recv_sgl;
+  // PREP_ACK_QP_ID 0: send Prepares -- receive ACKs
+	struct ibv_send_wr prep_send_wr[LDR_MAX_PREP_WRS];
+	struct ibv_sge coh_send_sgl[MAX_BCAST_BATCH], ack_recv_sgl[LDR_MAX_RECV_ACK_WRS];
+	struct ibv_wc ack_recv_wc[LDR_MAX_RECV_ACK_WRS];
+	struct ibv_recv_wr ack_recv_wr[LDR_MAX_RECV_ACK_WRS];
 
-  struct coalesce_inf coalesce_struct[MACHINE_NUM] = {0};
-	uint8_t credits_for_invs[MACHINE_NUM], credits_for_acks[MACHINE_NUM], credits_for_upds[MACHINE_NUM],
-			credits[VIRTUAL_CHANNELS][MACHINE_NUM], per_worker_outstanding[FOLLOWER_NUM] = {0};
-	uint16_t wn = 0, rm_id = 0, wr_i = 0, br_i = 0, cb_i = 0, coh_message_count[VIRTUAL_CHANNELS][MACHINE_NUM],
-			credit_wr_i = 0, op_i = 0, upd_i = 0,	inv_ops_i = 0, update_ops_i = 0, ack_ops_i, coh_buf_i = 0,
-			upd_count, send_ack_count, stalled_ops_i, updates_sent, credit_recv_counter = 0, rem_req_i = 0, prev_rem_req_i,
-			ack_recv_counter = 0, next_op_i = 0, previous_wr_i, worker_id, remote_clt_id, min_batch_ability,
-			ack_push_ptr = 0, ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,// last_measured_op_i = 0,
-			ws[FOLLOWERS_PER_MACHINE] = {0},	/* Window slot to use for a  LOCAL worker */
+  // PREP_ACK_QP_ID 1: send Commits  -- receive Writes
+  struct ibv_send_wr com_send_wr[LDR_MAX_COM_WRS];
+  struct ibv_sge com_send_sgl[MAX_BCAST_BATCH], w_recv_sgl[LDR_MAX_RECV_W_WRS];
+  struct ibv_wc w_recv_wc[LDR_MAX_RECV_W_WRS];
+  struct ibv_recv_wr w_recv_wr[LDR_MAX_RECV_W_WRS];
+
+  // FC_QP_ID 2: send Credits  -- receive Credits
+  struct ibv_send_wr credit_send_wr[LDR_MAX_CREDIT_WRS];
+  struct ibv_sge credit_sgl, credit_recv_sgl;
+  struct ibv_wc credit_wc[LDR_MAX_CREDIT_RECV];
+  struct ibv_recv_wr credit_recv_wr[LDR_MAX_CREDIT_RECV];
+
+ 	uint8_t credits[VIRTUAL_CHANNELS][FOLLOWER_MACHINE_NUM];
+	uint16_t coh_message_count[VIRTUAL_CHANNELS][MACHINE_NUM],
+			inv_ops_i = 0, update_ops_i = 0, ack_ops_i, coh_buf_i = 0,
+			ack_push_ptr = 0, ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
 			acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
-	uint32_t cmd_count = 0, credit_debug_cnt = 0, outstanding_rem_reqs = 0;
-	double empty_req_percentage;
-	long long remote_for_each_worker[FOLLOWER_NUM] = {0};
-	long long rolling_iter = 0, trace_iter = 0, credit_tx = 0, br_tx = 0, sent_ack_tx = 0, commit_br_tx = 0,
-			remote_tot_tx = 0;
+	uint32_t cmd_count = 0, credit_debug_cnt = 0;
+	uint32_t trace_iter = 0, credit_tx = 0, br_tx = 0, commit_br_tx = 0;
+
+
 	//req_type measured_req_flag = NO_REQ;
 	struct local_latency local_measure = {
 			.measured_local_region = -1,
@@ -120,7 +125,7 @@ void *leader(void *arg)
 
 	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
 		set_up_credits(credits, credit_send_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-		set_up_ldr_WRs(coh_send_wr, coh_send_sgl, coh_recv_wr, coh_recv_sgl,
+		set_up_ldr_WRs(prep_send_wr, coh_send_sgl, ack_recv_wr, ack_recv_sgl,
                    coh_buf, t_id, follower_id, cb, coh_mr, mcast, protocol);
 	}
 	// TRACE
@@ -214,9 +219,9 @@ void *leader(void *arg)
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
 			perform_broadcasts(&ack_size, p_writes, ack_bcast_ops, &ack_pop_ptr, credits,
-                         cb, credit_wc, &credit_debug_cnt, coh_send_sgl, coh_send_wr, coh_message_count,
-                         coh_buf, &coh_buf_i, &br_tx, &commit_br_tx, credit_recv_wr, t_id, protocol, coh_recv_sgl,
-                         &push_ptr, coh_recv_wr, coh_recv_qp, LEADER_BUF_SLOTS, (void*)incoming_reqs);
+                         cb, credit_wc, &credit_debug_cnt, coh_send_sgl, prep_send_wr, coh_message_count,
+                         coh_buf, &coh_buf_i, &br_tx, &commit_br_tx, credit_recv_wr, t_id, protocol, ack_recv_sgl,
+                         &push_ptr, ack_recv_wr, coh_recv_qp, LEADER_BUF_SLOTS, (void*)incoming_reqs);
 //    printf("Thread %d, broadcasts are done %llu \n", t_id, br_tx);
 
 //		/* ---------------------------------------------------------------------------
@@ -228,9 +233,9 @@ void *leader(void *arg)
 //				If credits must be sent back, then receives for new coherence messages have to be posted first*/
 //			credit_wr_i = forge_credits_LIN(coh_message_count, acks_seen, invs_seen, upds_seen, t_id,
 //											credit_send_wr, &credit_tx,
-//											cb, coh_recv_cq, coh_wc);
+//											cb, coh_recv_cq, ack_recv_wc);
 //			if (credit_wr_i > 0)
-//				send_credits(credit_wr_i, coh_recv_sgl, cb, &push_ptr, coh_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
+//				send_credits(credit_wr_i, ack_recv_sgl, cb, &push_ptr, ack_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
 //							 credit_send_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)incoming_reqs);
 //		}
 

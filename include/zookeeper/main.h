@@ -34,7 +34,8 @@
 #define REMOTE_UD_QP_ID 0 /* The id of the UD QP the clients use for remote reqs */
 #define BROADCAST_UD_QP_ID 1 /* The id of the UD QP the clients use for braodcasting */
 #define FC_UD_QP_ID 2 /* The id of the UD QP the clients use for flow control */
-#define LEADER_QP_NUM 3 /* The number of QPs for the leader */
+
+
 
 
 
@@ -194,7 +195,7 @@
 
 // ------COMMON-------------------
 #define MAX_BCAST_BATCH (ENABLE_MULTICAST == 1 ? 4 : 4) //8 //(128 / (MACHINE_NUM - 1)) // how many broadcasts can fit in a batch
-#define MESSAGES_IN_BCAST (ENABLE_MULTICAST == 1 ? 1 : (MACHINE_NUM - 1))
+#define MESSAGES_IN_BCAST (ENABLE_MULTICAST == 1 ? 1 : (FOLLOWER_MACHINE_NUM))
 #define MESSAGES_IN_BCAST_BATCH MAX_BCAST_BATCH * MESSAGES_IN_BCAST //must be smaller than the q_depth
 #define BCAST_TO_CACHE_BATCH 90 //100 // helps to keep small //47 for SC
 
@@ -235,6 +236,29 @@
 #define COMMIT_CREDITS 15
 #define BCAST_CREDITS (PREPARE_CREDITS + COMMIT_CREDITS)
 #define LDR_PREPOST_RECEIVES_NUM (W_CREDITS * FOLLOWER_MACHINE_NUM)
+#define MAX_OF_CREDITS MAX(W_CREDITS, PREPARE_CREDITS)
+#define LDR_MAX_RECEIVE_WRS (FOLLOWER_MACHINE_NUM * MAX_OF_CREDITS)
+#define LDR_MAX_RECEIVES (FOLLOWER_MACHINE_NUM * (W_CREDITS + PREPARE_CREDITS))
+#define LDR_VIRTUAL_CHANNELS 2 // upds acks and invs
+#define PREP_VC 0
+#define COMM_VC 1
+#define LDR_CREDIT_DIVIDER (W_CREDITS)
+#define LDR_CREDITS_IN_MESSAGE (W_CREDITS / LDR_CREDIT_DIVIDER)
+#define FLR_CREDIT_DIVIDER (LDR_CREDIT_DIVIDER)
+#define FLR_CREDITS_IN_MESSAGE (COMMIT_CREDITS / FLR_CREDIT_DIVIDER)
+
+
+// // PREP_ACK_QP_ID 0: send Prepares -- receive ACKs
+#define LDR_MAX_PREP_WRS (MESSAGES_IN_BCAST_BATCH)
+#define LDR_MAX_RECV_ACK_WRS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
+// PREP_ACK_QP_ID 1: send Commits  -- receive Writes
+#define LDR_MAX_COM_WRS (MESSAGES_IN_BCAST_BATCH)
+#define LDR_MAX_RECV_W_WRS (FOLLOWER_MACHINE_NUM * W_CREDITS)
+// Credits WRs
+#define LDR_MAX_CREDIT_WRS ((W_CREDITS / LDR_CREDITS_IN_MESSAGE ) * FOLLOWER_MACHINE_NUM)
+#define LDR_MAX_CREDIT_RECV ((COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE ) * FOLLOWER_MACHINE_NUM)
+
+// Commit and
 
 
 
@@ -244,9 +268,6 @@
 #define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
 #define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
-
-#define LEADER_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM)* (PREPARE_CREDITS + W_CREDITS))
-#define LEADER_BUF_SLOTS (LEADER_BUF_SIZE / UD_REQ_SIZE)
 
 #define OPS_BUFS_NUM (LEADER_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
 //#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
@@ -258,6 +279,15 @@
 #define MAX_CREDIT_RECVS_FOR_BCASTS (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
 #define MAX_CREDIT_RECVS_FOR_ACKS (CEILING(BCAST_TO_CACHE_BATCH, CREDITS_IN_MESSAGE))
 #define MAX_CREDIT_RECVS (MAX(MAX_CREDIT_RECVS_FOR_BCASTS, MAX_CREDIT_RECVS_FOR_ACKS))
+
+
+//-- LEADER
+#define LEADER_W_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
+#define LEADER_ACK_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM) * PREPARE_CREDITS)
+#define LEADER_W_BUF_SLOTS (LEADER_W_BUF_SIZE / UD_REQ_SIZE)
+#define LEADER_ACK_BUF_SLOTS (LEADER_ACK_BUF_SIZE / UD_REQ_SIZE)
+#define LEADER_BUF_SIZE (LEADER_W_BUF_SIZE + LEADER_ACK_BUF_SIZE)
+#define LEADER_BUF_SLOTS (LEADER_W_BUF_SLOTS + LEADER_ACK_BUF_SLOTS)
 
 /*-------------------------------------------------
 -----------------SELECTIVE SIGNALING-------------------------
@@ -280,6 +310,41 @@
 -----------------QUEUE DEPTHS-------------------------
 --------------------------------------------------*/
 
+#define LEADER_QP_NUM 3 /* The number of QPs for the leader */
+#define PREP_ACK_QP_ID 0
+#define COMMIT_W_QP_ID 1
+#define FC_QP_ID 2
+
+/*
+ * -------LEADER-------------
+ * 1st Dgram send Prepares -- receive ACKs
+ * 2nd Dgram send Commits  -- receive Writes
+ * 3rd Dgram send Credits  -- receive Credits
+ *
+ * ------FOLLOWER-----------
+ * 1st Dgram receive prepares -- send Acks
+ * 2nd Dgram receive Commits  -- send Writes
+ * 3rd Dgram receive Credits  -- send Credits
+ * */
+
+// LDR - Receive
+#define LDR_RECV_ACK_Q_DEPTH 500 //(LDR_MAX_RECV_ACK_WRS + 3)
+#define LDR_RECV_W_Q_DEPTH 500 //(LDR_MAX_RECV_W_WRS + 3)
+#define LDR_RECV_CR_Q_DEPTH 500 //()
+// LDR - Send
+#define LDR_SEND_PREP_Q_DEPTH 500 //(LDR_MAX_RECV_ACK_WRS + 3)
+#define LDR_SEND_COM_Q_DEPTH 500 //(LDR_MAX_RECV_W_WRS + 3)
+#define LDR_SEND_CR_Q_DEPTH 500 //()
+
+// FLR - Receive
+#define FLR_RECV_PREP_Q_DEPTH 500 //
+#define FLR_RECV_COM_Q_DEPTH 500 //
+#define FLR_RECV_CR_Q_DEPTH 500 //()
+// FLR - Send
+#define FLR_SEND_ACK_Q_DEPTH 500 //
+#define FLR_SEND_W_Q_DEPTH 500 //
+#define FLR_SEND_CR_Q_DEPTH 500 //
+
 //RECV
 #define WORKER_RECV_Q_DEPTH  (((MACHINE_NUM - 1) * CEILING(LEADERS_PER_MACHINE, FOLLOWER_QP_NUM) * WS_PER_WORKER) + 3) // + 3 for good measre
 #define CLIENT_RECV_REM_Q_DEPTH ((ENABLE_MULTI_BATCHES == 1 ? MAX_OUTSTANDING_REQS :  2 * CLIENT_SS_BATCH) + 3)
@@ -291,7 +356,7 @@
 #define LIN_CLIENT_RECV_CR_Q_DEPTH (MAX_COH_MESSAGES  + 8) // a reasonable upper bound
 
 // SEND
-#define WORKER_SEND_Q_DEPTH  WORKER_MAX_BATCH + 3 // + 3 for good measre
+#define WORKER_SEND_Q_DEPTH  WORKER_MAX_BATCH + 3 // + 3 for good measure
 #define CLIENT_SEND_REM_Q_DEPTH  ((ENABLE_MULTI_BATCHES == 1  ? MAX_OUTSTANDING_REQS : CLIENT_SS_BATCH) + 3) // 60)
 
 #define SC_CLIENT_SEND_BR_Q_DEPTH (MAX((MACHINE_NUM - 1) * BROADCAST_SS_BATCH, SC_MAX_COH_MESSAGES + 14) + 3)
