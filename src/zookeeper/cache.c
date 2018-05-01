@@ -259,7 +259,8 @@ void mica_insert_one_crcw(struct mica_kv *kv,
 
 /* The leader and follower send their local requests to this, reads get served
  * But writes do not get served, writes are only propagated here to see whether their keys exist */
-void cache_batch_op_trace(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp) {
+inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp)
+{
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -357,10 +358,113 @@ void cache_batch_op_trace(int op_num, int thread_id, struct extended_cache_op **
 			resp[I].type = CACHE_MISS;
 		}
 	}
-	if(ENABLE_CACHE_STATS == 1)
-		update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
+//	if(ENABLE_CACHE_STATS == 1)
+//		update_cache_stats(op_num, thread_id, op, resp, stalled_brces);
 
 }
+
+/* The leader sends the writes to be committed with this function*/
+inline void cache_batch_op_updates(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp)
+{
+  int I, j;	/* I is batch index */
+  long long stalled_brces = 0;
+#if CACHE_DEBUG == 1
+  //assert(cache.hash_table != NULL);
+	assert(op != NULL);
+	assert(op_num > 0 && op_num <= CACHE_BATCH_SIZE);
+	assert(resp != NULL);
+#endif
+
+#if CACHE_DEBUG == 2
+  for(I = 0; I < op_num; I++)
+		mica_print_op(&(*op)[I]);
+#endif
+
+  unsigned int bkt[CACHE_BATCH_SIZE];
+  struct mica_bkt *bkt_ptr[CACHE_BATCH_SIZE];
+  unsigned int tag[CACHE_BATCH_SIZE];
+  int key_in_store[CACHE_BATCH_SIZE];	/* Is this key in the datastore? */
+  struct cache_op *kv_ptr[CACHE_BATCH_SIZE];	/* Ptr to KV item in log */
+  /*
+     * We first lookup the key in the datastore. The first two @I loops work
+     * for both GETs and PUTs.
+     */
+  for(I = 0; I < op_num; I++) {
+    bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+    bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
+    __builtin_prefetch(bkt_ptr[I], 0, 0);
+    tag[I] = (*op)[I].key.tag;
+
+    key_in_store[I] = 0;
+    kv_ptr[I] = NULL;
+  }
+
+  for(I = 0; I < op_num; I++) {
+    for(j = 0; j < 8; j++) {
+      if(bkt_ptr[I]->slots[j].in_use == 1 &&
+         bkt_ptr[I]->slots[j].tag == tag[I]) {
+        uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
+                              cache.hash_table.log_mask;
+
+        /*
+                 * We can interpret the log entry as mica_op, even though it
+                 * may not contain the full MICA_MAX_VALUE value.
+                 */
+        kv_ptr[I] = (struct cache_op *) &cache.hash_table.ht_log[log_offset];
+
+        /* Small values (1--64 bytes) can span 2 cache lines */
+        __builtin_prefetch(kv_ptr[I], 0, 0);
+        __builtin_prefetch((uint8_t *) kv_ptr[I] + 64, 0, 0);
+
+        /* Detect if the head has wrapped around for this index entry */
+        if(cache.hash_table.log_head - bkt_ptr[I]->slots[j].offset >= cache.hash_table.log_cap) {
+          kv_ptr[I] = NULL;	/* If so, we mark it "not found" */
+        }
+
+        break;
+      }
+    }
+  }
+
+  // the following variables used to validate atomicity between a lock-free read of an object
+  cache_meta prev_meta;
+  for(I = 0; I < op_num; I++) {
+    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
+    if(kv_ptr[I] != NULL) {
+
+      /* We had a tag match earlier. Now compare log entry. */
+      long long *key_ptr_log = (long long *) kv_ptr[I];
+      long long *key_ptr_req = (long long *) &(*op)[I];
+
+      if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
+        key_in_store[I] = 1;
+        if ((*op)[I].opcode == CACHE_OP_UPD) {
+          assert((*op)[I].val_len == kv_ptr[I]->val_len);
+          optik_lock(&kv_ptr[I]->key.meta);
+          if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
+            memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
+            optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
+            resp[I].type = CACHE_UPD_SUCCESS;
+          } else {
+            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
+            resp[I].type = CACHE_UPD_FAIL;
+          }
+        }
+        else {
+          red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
+          assert(0);
+        }
+      }
+    }
+
+    if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+      resp[I].val_len = 0;
+      resp[I].val_ptr = NULL;
+      resp[I].type = CACHE_MISS;
+    }
+  }
+}
+
 
 
 /* ---------------------------------------------------------------------------

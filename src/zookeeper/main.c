@@ -15,7 +15,7 @@ atomic_char local_recv_flag[FOLLOWERS_PER_MACHINE][LEADERS_PER_MACHINE][64]; //f
 struct remote_qp remote_follower_qp[FOLLOWER_MACHINE_NUM][FOLLOWERS_PER_MACHINE][FOLLOWER_QP_NUM];
 struct remote_qp remote_leader_qp[LEADERS_PER_MACHINE][LEADER_QP_NUM];
 atomic_char qps_are_set_up;
-atomic_uint_fast64_t global_w_id;
+atomic_uint_fast64_t global_w_id, committed_global_w_id;
 
 #if ENABLE_WORKERS_CRCW == 1
 struct mica_kv kv;
@@ -59,12 +59,15 @@ int main(int argc, char *argv[])
   assert(LEADERS_PER_MACHINE == FOLLOWERS_PER_MACHINE); // hopefully temporary restriction
   assert((W_CREDITS % LDR_CREDIT_DIVIDER) == 0); // division better be perfect
   assert((COMMIT_CREDITS % FLR_CREDIT_DIVIDER) == 0); // division better be perfect
+  assert(sizeof(struct ack_message_ud_req) == LDR_ACK_RECV_SIZE);
+  assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
+
 	int i, c;
 	num_threads = -1;
 	is_roce = -1; machine_id = -1;
 	remote_IP = (char *)malloc(16 * sizeof(char));
-	global_w_id = 0;
-
+	global_w_id = 1; // DO not start from 0, because when checking for acks there is a non-zero test
+  committed_global_w_id = 0;
 
 	struct thread_params *param_arr;
 	pthread_t *thread_arr;
@@ -108,6 +111,7 @@ int main(int argc, char *argv[])
 	num_threads =  is_leader ? LEADERS_PER_MACHINE : FOLLOWERS_PER_MACHINE;
 
 	printf("size of write_op %lu \n", sizeof(struct write_op));
+  printf("size of ack %lu and ack_req %lu \n", sizeof(struct ack_message), sizeof(struct ack_message_ud_req));
 	param_arr = malloc(num_threads * sizeof(struct thread_params));
 	thread_arr = malloc((LEADERS_PER_MACHINE + FOLLOWERS_PER_MACHINE + 1) * sizeof(pthread_t));
 	memset((struct thread_stats*) t_stats, 0, LEADERS_PER_MACHINE * sizeof(struct thread_stats));

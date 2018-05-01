@@ -33,6 +33,7 @@
 #define CACHE_OP_INV 114
 #define CACHE_OP_ACK 115
 #define CACHE_OP_BRC 116       //Warning although this is cache opcode it's returned by cache to either Broadcast upd or inv
+#define Z_OP_COMMIT 151
 
 //Cache Response
 #define EMPTY 120
@@ -280,7 +281,12 @@ void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
 
 /* The leader and follower send their local requests to this, reads get served
  * But writes do not get served, writes are only propagated here to see whether their keys exist */
-void cache_batch_op_trace(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp);
+void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
+/* The leader sends the writes to be committed with this function*/
+void cache_batch_op_updates(int , int , struct cache_op **, struct mica_resp *);
+
+// ** OLD STUFF **
+
 void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
 void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
 

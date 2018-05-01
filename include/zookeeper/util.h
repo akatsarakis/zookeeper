@@ -136,8 +136,7 @@ void post_coh_recvs(struct hrd_ctrl_blk*, int*, struct mcast_essentials*, int, v
 // Set up the memory registrations required in the client if there is no Inlining
 void set_up_mrs(struct ibv_mr**, struct ibv_mr**, struct extended_cache_op*, struct mica_op*,
 				struct hrd_ctrl_blk*);
-// Set up a struct that stores pending writes
-void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size);
+
 void set_up_credits(uint8_t[][MACHINE_NUM], struct ibv_send_wr*, struct ibv_sge*,
 					struct ibv_recv_wr*, struct ibv_sge*, struct hrd_ctrl_blk*, int);
 // Set up the remote Requests send and recv WRs
@@ -151,14 +150,31 @@ void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER--------------------------------------
 ---------------------------------------------------------------------------*/
+// Set up a struct that stores pending writes
+void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size);
+// Set up a struct that points to completed writes
+void set_up_completed_writes(struct completed_writes**, uint32_t);
+
 
 // Set up all leader WRs
 void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
+                    struct ibv_send_wr*, struct ibv_sge*,
                     struct mica_op*, uint16_t, uint16_t, struct hrd_ctrl_blk*, struct ibv_mr*,
-                    struct mcast_essentials*, int);
+                    struct ibv_mr*, struct mcast_essentials*);
 // Post receives for the coherence traffic in the init phase
-void pre_post_recvs(struct hrd_ctrl_blk*, int* , struct mcast_essentials*, void*,
-                    uint32_t, uint32_t);
+void pre_post_recvs(struct hrd_ctrl_blk*, int* , bool, struct mcast_essentials*, void*,
+                    uint32_t, uint32_t, uint16_t);
+// set up some basic leader buffers
+void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
+                    struct mica_resp**, struct mica_op**, struct commit_fifo**);
+// Set up the memory registrations required in the leader if there is no Inlining
+void set_up_ldr_mrs(struct ibv_mr**, struct mica_op*, struct ibv_mr**, void*,
+                    struct hrd_ctrl_blk*);
+// Set up the credits for leader and follower
+void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
+                            struct ibv_sge* credit_send_sgl, struct ibv_recv_wr* credit_recv_wr,
+                            struct ibv_sge* credit_recv_sgl, struct hrd_ctrl_blk *cb, int protocol,
+                            uint32_t max_credit_wrs, uint32_t max_credit_recvs);
 // Manufactures a trace without a file
 void manufacture_trace(struct trace_command **cmds, int g_id);
 

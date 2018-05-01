@@ -218,7 +218,7 @@
 #define INV_CREDITS (CREDITS_FOR_EACH_CLIENT)
 #define BROADCAST_CREDITS (UPD_CREDITS + ACK_CREDITS + INV_CREDITS) /* Credits for each machine to issue Broadcasts */
 #define VIRTUAL_CHANNELS 3 // upds acks and invs
-#define ACK_VC 0
+//#define ACK_VC 0
 #define INV_VC 1
 #define UPD_VC 2
 #define LIN_CREDIT_DIVIDER 2 //1 /// this  has the potential to cause deadlocks //  =take care that this can be a big part of the network traffic
@@ -226,6 +226,12 @@
 #define MAX_CREDIT_WRS (BROADCAST_CREDITS / CREDITS_IN_MESSAGE) * (MACHINE_NUM - 1)
 #define MAX_COH_MESSAGES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
 #define MAX_COH_RECEIVES ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
+
+/* --------------------------------------------------------------------------------
+ * -----------------------------ZOOKEEPER---------------------------------------
+ * --------------------------------------------------------------------------------
+ * --------------------------------------------------------------------------------*/
+
 
 
 //--------FOLOWER Flow Control
@@ -240,75 +246,81 @@
 #define LDR_MAX_RECEIVE_WRS (FOLLOWER_MACHINE_NUM * MAX_OF_CREDITS)
 #define LDR_MAX_RECEIVES (FOLLOWER_MACHINE_NUM * (W_CREDITS + PREPARE_CREDITS))
 #define LDR_VIRTUAL_CHANNELS 2 // upds acks and invs
+#define LDR_VC_NUM 2
 #define PREP_VC 0
 #define COMM_VC 1
+#define FLR_VC_NUM 2
+#define ACK_VC 0
+#define W_VC 1
 #define LDR_CREDIT_DIVIDER (W_CREDITS)
 #define LDR_CREDITS_IN_MESSAGE (W_CREDITS / LDR_CREDIT_DIVIDER)
 #define FLR_CREDIT_DIVIDER (LDR_CREDIT_DIVIDER)
 #define FLR_CREDITS_IN_MESSAGE (COMMIT_CREDITS / FLR_CREDIT_DIVIDER)
 
+// if this is smaller than MAX_BCAST_BATCH + 2 it will deadlock because the signaling messaged is polled before actually posted
+#define COM_BCAST_SS_BATCH MAX((MIN_SS_BATCH / (FOLLOWER_MACHINE_NUM)), (MAX_BCAST_BATCH + 2))
 
-// // PREP_ACK_QP_ID 0: send Prepares -- receive ACKs
+
+// -------ACKS-------------
+#define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
+#define MAX_ACK_COALESCE 7
+#define LDR_ACK_RECV_SIZE (GRH_SIZE + ((MAX_ACK_COALESCE + 1) * 8))
+
+// -- COMMITS-----
+#define MAX_COM_COALESCE 7
+#define LDR_COM_SEND_SIZE ((MAX_COM_COALESCE + 1) * 8)
+#define FLR_COM_RECV_SIZE (GRH_SIZE + LDR_COM_SEND_SIZE)
+#define COM_ENABLE_INLINING ((LDR_COM_SEND_SIZE < MAXIMUM_INLINE_SIZE) ? 1: 0)
+#define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
+
+
+//---------LEADER-----------------------
+// PREP_ACK_QP_ID 0: send Prepares -- receive ACKs
 #define LDR_MAX_PREP_WRS (MESSAGES_IN_BCAST_BATCH)
 #define LDR_MAX_RECV_ACK_WRS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
-// PREP_ACK_QP_ID 1: send Commits  -- receive Writes
+// COMMIT_W_QP_ID 1: send Commits  -- receive Writes
 #define LDR_MAX_COM_WRS (MESSAGES_IN_BCAST_BATCH)
 #define LDR_MAX_RECV_W_WRS (FOLLOWER_MACHINE_NUM * W_CREDITS)
 // Credits WRs
 #define LDR_MAX_CREDIT_WRS ((W_CREDITS / LDR_CREDITS_IN_MESSAGE ) * FOLLOWER_MACHINE_NUM)
 #define LDR_MAX_CREDIT_RECV ((COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE ) * FOLLOWER_MACHINE_NUM)
 
-// Commit and
 
-
-
-
-//---------Buffer Space-------------
-#define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
-#define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
-#define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
-#define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
-
-#define OPS_BUFS_NUM (LEADER_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
-//#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
-#define COH_BUF_SIZE (LEADER_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
-#define COH_BUF_SLOTS (LEADER_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
-/* We post receives for credits after sending broadcasts or acks,
-	For Broadcasts the maximum number is: (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
-	For acks the maximum number is: CEILING(BCAST_TO_CACHE_BATCH, REDITS_IN_MESSAGE)   */
-#define MAX_CREDIT_RECVS_FOR_BCASTS (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
-#define MAX_CREDIT_RECVS_FOR_ACKS (CEILING(BCAST_TO_CACHE_BATCH, CREDITS_IN_MESSAGE))
-#define MAX_CREDIT_RECVS (MAX(MAX_CREDIT_RECVS_FOR_BCASTS, MAX_CREDIT_RECVS_FOR_ACKS))
-
+//--------FOLLOWER--------------
+// // PREP_ACK_QP_ID 0: receive Prepares -- send ACKs
+#define FLR_MAX_ACK_WRS (PREPARE_CREDITS)
+#define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS)
+#define FLR_PREP_RECV_SIZE (UD_REQ_SIZE)
+// COMMIT_W_QP_ID 1: send Writes  -- receive Commits
+#define FLR_MAX_W_WRS (W_CREDITS)
+#define FLR_MAX_RECV_COM_WRS (COMMIT_CREDITS)
+// Credits WRs
+#define FLR_MAX_CREDIT_WRS (COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE )
+#define FLR_MAX_CREDIT_RECV (W_CREDITS / LDR_CREDITS_IN_MESSAGE)
 
 //-- LEADER
 #define LEADER_W_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
-#define LEADER_ACK_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM) * PREPARE_CREDITS)
+#define LEADER_ACK_BUF_SIZE (LDR_ACK_RECV_SIZE * FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
 #define LEADER_W_BUF_SLOTS (LEADER_W_BUF_SIZE / UD_REQ_SIZE)
-#define LEADER_ACK_BUF_SLOTS (LEADER_ACK_BUF_SIZE / UD_REQ_SIZE)
+#define LEADER_ACK_BUF_SLOTS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
 #define LEADER_BUF_SIZE (LEADER_W_BUF_SIZE + LEADER_ACK_BUF_SIZE)
 #define LEADER_BUF_SLOTS (LEADER_W_BUF_SLOTS + LEADER_ACK_BUF_SLOTS)
 
-/*-------------------------------------------------
------------------SELECTIVE SIGNALING-------------------------
---------------------------------------------------*/
-#define MIN_SS_BATCH 127// THe minimum ss batch
-#define CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (MAX_CREDIT_WRS + 1))
-#define CREDIT_SS_BATCH_ (CREDIT_SS_BATCH - 1)
-#define SC_CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (SC_MAX_CREDIT_WRS + 1))
-#define SC_CREDIT_SS_BATCH_ (SC_CREDIT_SS_BATCH - 1)
-#define WORKER_SS_BATCH MAX(MIN_SS_BATCH, (WORKER_MAX_BATCH + 1))
-#define WORKER_SS_BATCH_ (WORKER_SS_BATCH - 1)
-#define CLIENT_SS_BATCH MAX(MIN_SS_BATCH, (WINDOW_SIZE + 1))
-#define CLIENT_SS_BATCH_ (CLIENT_SS_BATCH - 1)
-// if this is smaller than MAX_BCAST_BATCH + 2 it will deadlock because the signaling messaged is polled before actually posted
-#define BROADCAST_SS_BATCH MAX((MIN_SS_BATCH / (MACHINE_NUM - 1)), (MAX_BCAST_BATCH + 2))
-#define ACK_SS_BATCH MAX(MIN_SS_BATCH, (BCAST_TO_CACHE_BATCH + 1)) //* (MACHINE_NUM - 1)
 
+//--FOLLOWER
+#define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE  * PREPARE_CREDITS)
+#define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * COMMIT_CREDITS)
+#define FLR_PREP_BUF_SLOTS (PREPARE_CREDITS)
+#define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
+#define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
+#define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
 
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
 --------------------------------------------------*/
+
+
+
 
 #define LEADER_QP_NUM 3 /* The number of QPs for the leader */
 #define PREP_ACK_QP_ID 0
@@ -344,6 +356,59 @@
 #define FLR_SEND_ACK_Q_DEPTH 500 //
 #define FLR_SEND_W_Q_DEPTH 500 //
 #define FLR_SEND_CR_Q_DEPTH 500 //
+
+
+
+
+
+
+
+/* ----------------
+ * -------------OLD STUFF
+ * ---------------------------*/
+
+
+
+
+
+
+//---------Buffer Space-------------
+#define LIN_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * BROADCAST_CREDITS)
+#define SC_CLT_BUF_SIZE (UD_REQ_SIZE * (MACHINE_NUM - 1) * SC_CREDITS)
+#define LIN_CLT_BUF_SLOTS ((MACHINE_NUM - 1) * BROADCAST_CREDITS)
+#define SC_CLT_BUF_SLOTS (SC_CLT_BUF_SIZE  / UD_REQ_SIZE)
+
+#define OPS_BUFS_NUM (LEADER_ENABLE_INLINING == 1 ? 2 : 3) // how many OPS buffers are in use
+//#define EXTENDED_OPS_SIZE (OPS_BUFS_NUM * CACHE_BATCH_SIZE * CACHE_OP_SIZE)
+#define COH_BUF_SIZE (LEADER_ENABLE_INLINING == 1 ?	(MAX_BCAST_BATCH * MICA_OP_SIZE) : (BROADCAST_SS_BATCH * MICA_OP_SIZE))
+#define COH_BUF_SLOTS (LEADER_ENABLE_INLINING == 1 ? MAX_BCAST_BATCH : BROADCAST_SS_BATCH)
+/* We post receives for credits after sending broadcasts or acks,
+	For Broadcasts the maximum number is: (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
+	For acks the maximum number is: CEILING(BCAST_TO_CACHE_BATCH, REDITS_IN_MESSAGE)   */
+#define MAX_CREDIT_RECVS_FOR_BCASTS (MACHINE_NUM - 1) * (CEILING(MAX_BCAST_BATCH, CREDITS_IN_MESSAGE))
+#define MAX_CREDIT_RECVS_FOR_ACKS (CEILING(BCAST_TO_CACHE_BATCH, CREDITS_IN_MESSAGE))
+#define MAX_CREDIT_RECVS (MAX(MAX_CREDIT_RECVS_FOR_BCASTS, MAX_CREDIT_RECVS_FOR_ACKS))
+
+
+
+/*-------------------------------------------------
+-----------------SELECTIVE SIGNALING-------------------------
+--------------------------------------------------*/
+#define MIN_SS_BATCH 127// THe minimum ss batch
+#define CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (MAX_CREDIT_WRS + 1))
+#define CREDIT_SS_BATCH_ (CREDIT_SS_BATCH - 1)
+#define SC_CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (SC_MAX_CREDIT_WRS + 1))
+#define SC_CREDIT_SS_BATCH_ (SC_CREDIT_SS_BATCH - 1)
+#define WORKER_SS_BATCH MAX(MIN_SS_BATCH, (WORKER_MAX_BATCH + 1))
+#define WORKER_SS_BATCH_ (WORKER_SS_BATCH - 1)
+#define CLIENT_SS_BATCH MAX(MIN_SS_BATCH, (WINDOW_SIZE + 1))
+#define CLIENT_SS_BATCH_ (CLIENT_SS_BATCH - 1)
+// if this is smaller than MAX_BCAST_BATCH + 2 it will deadlock because the signaling messaged is polled before actually posted
+#define BROADCAST_SS_BATCH MAX((MIN_SS_BATCH / (MACHINE_NUM - 1)), (MAX_BCAST_BATCH + 2))
+#define ACK_SS_BATCH MAX(MIN_SS_BATCH, (BCAST_TO_CACHE_BATCH + 1)) //* (MACHINE_NUM - 1)
+
+
+
 
 //RECV
 #define WORKER_RECV_Q_DEPTH  (((MACHINE_NUM - 1) * CEILING(LEADERS_PER_MACHINE, FOLLOWER_QP_NUM) * WS_PER_WORKER) + 3) // + 3 for good measre
@@ -427,17 +492,71 @@ struct remote_qp {
 	// no padding needed- false sharing is not an issue, only fragmentation
 };
 
-enum write_state {INVALID, VALID, SENT};
+/*
+ *  SENT means we sent the prepare message
+ *  READY means all acks have been gathered
+ *  SEND_COMMITS mens it has been propagated to the
+ *  cache and commits should be sent out
+ * */
+enum write_state {INVALID, VALID, SENT, READY, SEND_COMMITTS};
 
+
+// A data structute that keeps track of the outstanding writes
 struct pending_writes {
 	struct write_op *write_ops;
-//  uint64_t *global_ids;
 	uint32_t unordered_writes_num;
 	uint32_t writes_num;
   uint32_t *unordered_writes;
   enum write_state *w_state;
+  uint16_t *c_write_ptr; // backward pointer to
+  uint8_t *acks_seen;
 };
 
+struct completed_writes {
+  struct write_op **w_ops; // FIFO QUEUE that points to the next write to commit
+  enum write_state *w_state;
+  uint16_t com_pull_ptr;
+  uint16_t bcast_pull_ptr;
+  uint16_t push_ptr;
+
+};
+
+// The format of an ack repsonse
+struct ack_message {
+  uint8_t follower_id;
+  uint8_t opcode;
+  uint16_t ack_num;
+  uint8_t unused[4];
+  uint64_t global_id[MAX_ACK_COALESCE];
+};
+
+struct ack_message_ud_req {
+  struct ibv_grh grh;
+  struct ack_message ack;
+
+ };
+
+// The format of an ack repsonse
+struct com_message {
+  uint8_t follower_id;
+  uint8_t opcode;
+  uint16_t com_num;
+  uint32_t session_id;
+  uint64_t g_id[MAX_COM_COALESCE];
+};
+
+struct com_message_ud_req {
+  struct ibv_grh grh;
+  struct ack_message com;
+
+};
+
+struct commit_fifo {
+  struct com_message *commits;
+  uint16_t push_ptr;
+  uint16_t pull_ptr;
+  uint16_t size;
+};
 
 struct thread_stats { // 2 cache lines
 	long long cache_hits_per_thread;
@@ -504,7 +623,7 @@ extern struct thread_stats t_stats[LEADERS_PER_MACHINE];
 extern struct follower_stats f_stats[FOLLOWERS_PER_MACHINE];
 struct mica_op;
 extern struct mica_op *local_req_region;
-extern atomic_uint_fast64_t global_w_id;
+extern atomic_uint_fast64_t global_w_id, committed_global_w_id;
 
 struct thread_params {
 	int id;

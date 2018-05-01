@@ -785,27 +785,7 @@ void set_up_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_
     }
 }
 
-// Set up a struct that stores pending writes
-void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
-{
-  int i;
-  (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
-  (*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
-  (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-  (*p_writes)->unordered_writes = (uint32_t*) malloc(size * sizeof(uint32_t));
-//  (*p_writes)->global_ids = (uint64_t*) malloc(size * sizeof(uint64_t));
 
-  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
-//  memset((*p_writes)->global_ids, 0, size * sizeof(uint64_t));
-  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
-  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
-
-  for (i = 0; i < size; i++) {
-    (*p_writes)->write_ops[i].opcode = CACHE_OP_BRC;
-    (*p_writes)->write_ops[i].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
-    (*p_writes)->w_state[i] = INVALID;
-  }
-}
 
 // Set up the remote Requests send and recv WRs
 void set_up_remote_WRs(struct ibv_send_wr* rem_send_wr, struct ibv_sge* rem_send_sgl,
@@ -866,8 +846,8 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
                   coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
                 }
                 else {
-                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
-                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
+//                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
+//                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
                 }
               coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
             }
@@ -916,12 +896,11 @@ void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_s
     int max_credit_recvs = protocol == FOLLOWER ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
     // Credits
     if (protocol == FOLLOWER)
-        for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
+        for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = W_CREDITS;
     else {
-        for (i = 0; i < MACHINE_NUM; i++) {
-            credits[ACK_VC][i] = ACK_CREDITS;
-            credits[INV_VC][i] = INV_CREDITS;
-            credits[UPD_VC][i] = UPD_CREDITS;
+        for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
+            credits[PREP_VC][i] = PREPARE_CREDITS;
+            credits[COMM_VC][i] = COMMIT_CREDITS;
         }
     }
     // Credit WRs
@@ -991,6 +970,49 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 ------------------------------LEADER --------------------------------------
 ---------------------------------------------------------------------------*/
 
+// Set up a struct that stores pending writes
+void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
+{
+  int i;
+  (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
+  (*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
+  (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
+  (*p_writes)->unordered_writes = (uint32_t*) malloc(size * sizeof(uint32_t));
+  (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+  (*p_writes)->c_write_ptr= (uint16_t*) malloc(size * sizeof(uint16_t));
+
+  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
+
+  //  memset((*p_writes)->global_ids, 0, size * sizeof(uint64_t));
+  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
+  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
+  memset((*p_writes)->c_write_ptr, 0, size * sizeof(uint16_t));
+  memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
+
+
+  for (i = 0; i < size; i++) {
+    (*p_writes)->write_ops[i].opcode = CACHE_OP_BRC;
+    (*p_writes)->write_ops[i].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+    (*p_writes)->w_state[i] = INVALID;
+  }
+}
+
+
+// Set up a struct that stores pending writes
+void set_up_completed_writes(struct completed_writes **c_writes, uint32_t size)
+{
+  int i;
+  (*c_writes)->w_ops = (struct write_op**) malloc(size * sizeof(struct write_op*));
+  (*c_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
+  memset((*c_writes)->w_ops, 0, size * sizeof(struct write_op));
+  (*c_writes)->push_ptr = 0;
+  (*c_writes)->com_pull_ptr = 0; (*c_writes)->bcast_pull_ptr = 0;
+  for (i = 0; i < size; i++) {
+    (*c_writes)->w_state[i] = INVALID;
+  }
+}
+
+
 // set the different queue depths for client's queue pairs
 void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int protocol)
 {
@@ -1029,71 +1051,116 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
 
 // Prepost Receives on the Leader Side
 // Post receives for the coherence traffic in the init phase
-void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essentials *mcast, void* buf,
-                    uint32_t max_reqs, uint32_t number_of_recvs)
+void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, bool enable_mcast_receive, struct mcast_essentials *mcast, void* buf,
+                    uint32_t max_reqs, uint32_t number_of_recvs, uint16_t QP_ID)
 {
   uint32_t i;//, j;
   for(i = 0; i < number_of_recvs; i++) {
-      if (ENABLE_MULTICAST == 1) {
+      if (enable_mcast_receive) {
         hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
                             UD_REQ_SIZE, mcast->recv_mr->lkey);
       }
-      else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
+      else hrd_post_dgram_recv(cb->dgram_qp[QP_ID],
                                (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
       HRD_MOD_ADD(*push_ptr, max_reqs);
   }
 }
 
 
+// set up some basic leader buffers
+void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
+                    struct mica_resp **commit_resp,
+                    struct mica_op **buf, struct commit_fifo **com_fifo)
+{
+  int i;
+
+  uint16_t cache_op_size = sizeof(struct cache_op);
+  uint16_t mica_resp_size = sizeof(struct mica_resp);
+  *buf = memalign(4096, COH_BUF_SIZE);
+  *ops = memalign(4096, CACHE_BATCH_SIZE *  cache_op_size);
+  *com_fifo =  malloc(sizeof(struct commit_fifo));
+  (*com_fifo)->commits = (struct com_message *) malloc(COMMIT_FIFO_SIZE * sizeof(struct com_message));
+  *resp = memalign(4096, CACHE_BATCH_SIZE * mica_resp_size);
+  *commit_resp = memalign(4096, LEADER_PENDING_WRITES * mica_resp_size);
+  (*com_fifo)->push_ptr = 0; (*com_fifo)->pull_ptr = 0;
+  (*com_fifo)->size = 0;
+  for(i = 0; i <  CACHE_BATCH_SIZE; i++) (*resp)[i].type = EMPTY;
+  for(i = 0; i <  LEADER_PENDING_WRITES; i++) (*commit_resp)[i].type = EMPTY;
+  for(i = 0; i <  COMMIT_CREDITS; i++) (*com_fifo)->commits[i].opcode = Z_OP_COMMIT;
+  assert(*ops != NULL && *resp != NULL && *commit_resp != NULL && *buf != NULL);
+
+}
+
+// Set up the memory registrations required in the leader if there is no Inlining
+void set_up_ldr_mrs(struct ibv_mr **prep_mr, struct mica_op *prep_buf,
+                    struct ibv_mr **com_mr, void *com_buf,
+                    struct hrd_ctrl_blk *cb)
+{
+  if (LEADER_ENABLE_INLINING == 0) {
+    if (WRITE_RATIO != 0) *prep_mr = register_buffer(cb->pd, (void*)prep_buf, COH_BUF_SIZE);
+  }
+  if (!COM_ENABLE_INLINING) *com_mr = register_buffer(cb->pd, com_buf,
+                                                      COMMIT_CREDITS * sizeof(struct com_message));
+}
+
 // Set up all leader WRs
-void set_up_ldr_WRs(struct ibv_send_wr *send_wr, struct ibv_sge *send_sgl,
-                    struct ibv_recv_wr *recv_wr, struct ibv_sge *recv_sgl,
+void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_sgl,
+                    struct ibv_recv_wr *ack_recv_wr, struct ibv_sge *ack_recv_sgl,
+                    struct ibv_send_wr *com_send_wr, struct ibv_sge *com_send_sgl,
                     struct mica_op *buf, uint16_t t_id, uint16_t remote_thread,
-                    struct hrd_ctrl_blk *cb, struct ibv_mr *mr,
-                    struct mcast_essentials *mcast, int protocol)
+                    struct hrd_ctrl_blk *cb, struct ibv_mr *prep_mr, struct ibv_mr *com_mr,
+                    struct mcast_essentials *mcast)
 {
   uint16_t i, j;
   //BROADCAST WRs and credit Receives
   for (j = 0; j < MAX_BCAST_BATCH; j++) { // Number of Broadcasts
-    //send_sgl[j].addr = (uint64_t) (uintptr_t) (buf + j);
-    if (LEADER_ENABLE_INLINING == 0) send_sgl[j].lkey = mr->lkey;
+    //prep_send_sgl[j].addr = (uint64_t) (uintptr_t) (buf + j);
+    if (LEADER_ENABLE_INLINING == 0) prep_send_sgl[j].lkey = prep_mr->lkey;
+    if (!COM_ENABLE_INLINING) com_send_sgl[j].lkey = com_mr->lkey;
     for (i = 0; i < MESSAGES_IN_BCAST; i++) {
       uint16_t rm_id = i;
       uint16_t index = (j * MESSAGES_IN_BCAST) + i;
       assert (index < MESSAGES_IN_BCAST_BATCH);
       if (ENABLE_MULTICAST == 1) {
-        send_wr[index].wr.ud.ah = mcast->send_ah;
-        send_wr[index].wr.ud.remote_qpn = mcast->qpn;
-        send_wr[index].wr.ud.remote_qkey = mcast->qkey;
+        prep_send_wr[index].wr.ud.ah = mcast->send_ah;
+        prep_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
+        prep_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
       }
       else {
-        send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][BROADCAST_UD_QP_ID].ah;
-        send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][BROADCAST_UD_QP_ID].qpn;
-        send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+        prep_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].ah;
+        prep_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].qpn;
+        prep_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+        com_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].ah;
+        com_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].qpn;
+        com_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
       }
-      send_wr[index].opcode = IBV_WR_SEND;
-      send_wr[index].num_sge = 1;
-      send_wr[index].sg_list = &send_sgl[j];
-      if (LEADER_ENABLE_INLINING == 1) send_wr[index].send_flags = IBV_SEND_INLINE;
-      send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &send_wr[index + 1];
+      prep_send_wr[index].opcode = IBV_WR_SEND;
+      prep_send_wr[index].num_sge = 1;
+      prep_send_wr[index].sg_list = &prep_send_sgl[j];
+      com_send_wr[index].opcode = IBV_WR_SEND;
+      com_send_wr[index].num_sge = 1;
+      com_send_wr[index].sg_list = &com_send_sgl[j];
+      if (LEADER_ENABLE_INLINING == 1) prep_send_wr[index].send_flags = IBV_SEND_INLINE;
+      if (COM_ENABLE_INLINING == 1) com_send_wr[index].send_flags = IBV_SEND_INLINE;
+      prep_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &prep_send_wr[index + 1];
+      com_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &com_send_wr[index + 1];
     }
   }
 
-  // Coherence Receives
-  int max_coh_receives = protocol == FOLLOWER ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
-  for (i = 0; i < max_coh_receives; i++) {
-    recv_sgl[i].length = UD_REQ_SIZE;
-    if (protocol == FOLLOWER && ENABLE_MULTICAST == 1)
-      recv_sgl[i].lkey = mcast->recv_mr->lkey;
-    else  recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
-    recv_wr[i].sg_list = &recv_sgl[i];
-    recv_wr[i].num_sge = 1;
+  // ACK Receives
+  for (i = 0; i < LDR_MAX_RECV_ACK_WRS; i++) {
+    ack_recv_sgl[i].length = LDR_ACK_RECV_SIZE;
+    if (ENABLE_MULTICAST == 1)
+      ack_recv_sgl[i].lkey = mcast->recv_mr->lkey;
+    else  ack_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+    ack_recv_wr[i].sg_list = &ack_recv_sgl[i];
+    ack_recv_wr[i].num_sge = 1;
   }
 }
 
 // The Leader sends credits to the followers when it receives their writes
-// and it receives credits for its commit messages
-void set_up_ldr_credits(uint8_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
+// The follower sends credits to the leader when it receives commit messages
+void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
                         struct ibv_sge* credit_send_sgl, struct ibv_recv_wr* credit_recv_wr,
                         struct ibv_sge* credit_recv_sgl, struct hrd_ctrl_blk *cb, int protocol,
                         uint32_t max_credit_wrs, uint32_t max_credit_recvs)
@@ -1103,7 +1170,7 @@ void set_up_ldr_credits(uint8_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send
 //  int max_credit_recvs = protocol == FOLLOWER ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
   // Credits
   if (protocol == FOLLOWER)
-    for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
+    ;//for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
   else {
     for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
       credits[PREP_VC][i] = PREPARE_CREDITS;
@@ -1111,9 +1178,9 @@ void set_up_ldr_credits(uint8_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send
     }
   }
   // Credit WRs
-  for (i = 0; i < max_credt_wrs; i++) {
+  for (i = 0; i < max_credit_wrs; i++) {
     credit_send_sgl->length = 0;
-    credit_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
+    credit_send_wr[i].opcode = IBV_WR_SEND; // No immediate is required for the credits
     credit_send_wr[i].num_sge = 0;
     credit_send_wr[i].sg_list = credit_send_sgl;
     credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
