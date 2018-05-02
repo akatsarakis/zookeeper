@@ -982,6 +982,8 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
   (*p_writes)->c_write_ptr= (uint16_t*) malloc(size * sizeof(uint16_t));
 
   (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
+  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
+  (*p_writes)->size = 0;
 
   //  memset((*p_writes)->global_ids, 0, size * sizeof(uint64_t));
   memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
@@ -1054,16 +1056,16 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
 // Prepost Receives on the Leader Side
 // Post receives for the coherence traffic in the init phase
 void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, bool enable_mcast_receive, struct mcast_essentials *mcast, void* buf,
-                    uint32_t max_reqs, uint32_t number_of_recvs, uint16_t QP_ID)
+                    uint32_t max_reqs, uint32_t number_of_recvs, uint16_t QP_ID, uint32_t message_size)
 {
   uint32_t i;//, j;
   for(i = 0; i < number_of_recvs; i++) {
       if (enable_mcast_receive) {
-        hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
-                            UD_REQ_SIZE, mcast->recv_mr->lkey);
+        hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * message_size),
+                            message_size, mcast->recv_mr->lkey);
       }
       else hrd_post_dgram_recv(cb->dgram_qp[QP_ID],
-                               (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
+                               (void *) (buf + *push_ptr * message_size), message_size, cb->dgram_buf_mr->lkey);
       MOD_ADD(*push_ptr, max_reqs);
   }
 }

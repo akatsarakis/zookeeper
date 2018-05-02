@@ -46,9 +46,9 @@ void *follower(void *arg)
   /* Fill the RECV queues that receive the Commits and Prepares, (we need to do this early) */
   if (WRITE_RATIO > 0) {
     pre_post_recvs(cb, &prep_push_ptr, false, NULL, (void *) prep_buffer,
-                   FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID);
+                   FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID, FLR_PREP_RECV_SIZE);
     pre_post_recvs(cb, &com_push_ptr, false, NULL, (void *) com_buffer,
-                   FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID);
+                   FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID, FLR_COM_RECV_SIZE);
   }
   /* -----------------------------------------------------
   --------------CONNECT WITH FOLLOWERS-----------------------

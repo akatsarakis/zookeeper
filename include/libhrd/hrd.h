@@ -59,8 +59,10 @@
 
 
 #define HERD_VALUE_SIZE (USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + BASE_VALUE_SIZE) : BASE_VALUE_SIZE) //(169 + 64)// 46 + 64 + 64//32 //(46 + 64)
+#define VALUE_SIZE (HERD_VALUE_SIZE)
 /* Request sizes */
 #define KEY_SIZE 16
+#define TRUE_KEY_SIZE 8 // the key that is actually used by MICA
 #define HERD_GET_REQ_SIZE ((KEY_SIZE + 1 )) /* 16 byte key + opcode */
 #define HERD_PUT_REQ_SIZE (KEY_SIZE + 1 + 1 + HERD_VALUE_SIZE) /* Key, op, len, val */
 

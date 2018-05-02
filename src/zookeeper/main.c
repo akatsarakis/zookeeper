@@ -55,20 +55,28 @@ int main(int argc, char *argv[])
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
-	assert(sizeof(struct key) == 8);
+	assert(sizeof(struct key) == TRUE_KEY_SIZE);
   assert(LEADERS_PER_MACHINE == FOLLOWERS_PER_MACHINE); // hopefully temporary restriction
   assert((W_CREDITS % LDR_CREDIT_DIVIDER) == 0); // division better be perfect
   assert((COMMIT_CREDITS % FLR_CREDIT_DIVIDER) == 0); // division better be perfect
   assert(sizeof(struct ack_message_ud_req) == LDR_ACK_RECV_SIZE);
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
 
+
+  printf("size of a write %lu, size of write recv slot %d size of w_message %lu , "
+           "value size %d, size of cache op %lu , sizeof udreq w message %lu \n",
+         sizeof(struct write), LDR_W_RECV_SIZE, sizeof(struct w_message), VALUE_SIZE,
+         sizeof(struct cache_op), sizeof(struct w_message_ud_req));
+  assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
+  assert(sizeof(struct w_message) == FLR_W_SEND_SIZE);
   uint8_t aek[16];
   uint64 random_id = 123456789;
   uint64_t random_id2 = 473261955;
   memcpy(aek, &random_id, sizeof(uint64_t));
   memcpy(aek + 8, &random_id2, sizeof(uint64_t));
   uint64_t random_id3, random_id4;
-  memcpy(&random_id3, aek, sizeof(uint64_t));
+  //memcpy(&random_id3, aek, sizeof(uint64_t));
+  random_id3 = *(uint64_t *)(aek);
   memcpy(&random_id4, aek + 8,  sizeof(uint64_t));
 
   printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu \n",

@@ -163,7 +163,7 @@ void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
                     struct ibv_mr*, struct mcast_essentials*);
 // Post receives for the coherence traffic in the init phase
 void pre_post_recvs(struct hrd_ctrl_blk*, int* , bool, struct mcast_essentials*, void*,
-                    uint32_t, uint32_t, uint16_t);
+                    uint32_t, uint32_t, uint16_t, uint32_t);
 // set up some basic leader buffers
 void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
                     struct mica_resp**, struct mica_op**, struct commit_fifo**);

@@ -81,7 +81,7 @@
 /*-------------------------------------------------
 	-----------------LEADER------------------------
 --------------------------------------------------*/
-#define LEADER_PENDING_WRITES (SESSIONS_PER_THREAD)
+
 
 
 
@@ -233,7 +233,6 @@
  * --------------------------------------------------------------------------------*/
 
 
-
 //--------FOLOWER Flow Control
 #define W_CREDITS 15
 
@@ -264,7 +263,9 @@
 // -------ACKS-------------
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
 #define MAX_ACK_COALESCE 7
-#define LDR_ACK_RECV_SIZE (GRH_SIZE + ((MAX_ACK_COALESCE + 1) * 8))
+#define FLR_ACK_SEND_SIZE ((MAX_ACK_COALESCE + 1) * 8)
+#define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
+
 
 // -- COMMITS-----
 #define MAX_COM_COALESCE 7
@@ -272,6 +273,17 @@
 #define FLR_COM_RECV_SIZE (GRH_SIZE + LDR_COM_SEND_SIZE)
 #define COM_ENABLE_INLINING ((LDR_COM_SEND_SIZE < MAXIMUM_INLINE_SIZE) ? 1: 0)
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
+
+//---WRITES---
+#define MAX_W_COALESCE 1
+#define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
+#define SINGLE_WRITE_PAYLOAD (HERD_VALUE_SIZE + WRITE_HEADER)
+#define WRITE_MESSAGES_VALUE_SIZE (MAX_W_COALESCE * SINGLE_WRITE_PAYLOAD)
+#define FLR_W_SEND_SIZE (WRITE_MESSAGES_VALUE_SIZE)
+#define LDR_W_RECV_SIZE (GRH_SIZE + FLR_W_SEND_SIZE)
+
+//--PREPARES
+#define FLR_PREP_RECV_SIZE (UD_REQ_SIZE)
 
 
 //---------LEADER-----------------------
@@ -290,7 +302,6 @@
 // // PREP_ACK_QP_ID 0: receive Prepares -- send ACKs
 #define FLR_MAX_ACK_WRS (PREPARE_CREDITS)
 #define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS)
-#define FLR_PREP_RECV_SIZE (UD_REQ_SIZE)
 // COMMIT_W_QP_ID 1: send Writes  -- receive Commits
 #define FLR_MAX_W_WRS (W_CREDITS)
 #define FLR_MAX_RECV_COM_WRS (COMMIT_CREDITS)
@@ -299,12 +310,16 @@
 #define FLR_MAX_CREDIT_RECV (W_CREDITS / LDR_CREDITS_IN_MESSAGE)
 
 //-- LEADER
-#define LEADER_W_BUF_SIZE ((UD_REQ_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
+#define LEADER_W_BUF_SIZE ((LDR_W_RECV_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
 #define LEADER_ACK_BUF_SIZE (LDR_ACK_RECV_SIZE * FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
-#define LEADER_W_BUF_SLOTS (LEADER_W_BUF_SIZE / UD_REQ_SIZE)
+#define LEADER_W_BUF_SLOTS (FOLLOWER_MACHINE_NUM * W_CREDITS)
 #define LEADER_ACK_BUF_SLOTS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
 #define LEADER_BUF_SIZE (LEADER_W_BUF_SIZE + LEADER_ACK_BUF_SIZE)
 #define LEADER_BUF_SLOTS (LEADER_W_BUF_SLOTS + LEADER_ACK_BUF_SLOTS)
+
+#define LEADER_REMOTE_W_SLOTS (FOLLOWER_MACHINE_NUM * W_CREDITS * MAX_W_COALESCE)
+#define LEADER_PENDING_WRITES (SESSIONS_PER_THREAD + LEADER_REMOTE_W_SLOTS)
+
 
 
 //--FOLLOWER
@@ -503,12 +518,17 @@ enum write_state {INVALID, VALID, SENT, READY, SEND_COMMITTS};
 
 // A data structute that keeps track of the outstanding writes
 struct pending_writes {
+	// The first half of this array is session based and
+	// the second half is a fifo for remote writes
 	struct write_op *write_ops;
 	uint32_t unordered_writes_num;
 	uint32_t writes_num;
   uint32_t *unordered_writes;
   enum write_state *w_state;
-  uint16_t *c_write_ptr; // backward pointer to
+  uint16_t *c_write_ptr; // backward pointers to the completed writes
+	uint16_t push_ptr;
+	uint16_t pull_ptr;
+	uint16_t size;
   uint8_t *acks_seen;
 };
 
@@ -527,7 +547,7 @@ struct ack_message {
   uint8_t opcode;
   uint16_t ack_num;
   uint8_t global_id[MAX_ACK_COALESCE * 8];
-  uint8_t unused[4];
+//  uint8_t unused[4];
 };
 
 struct ack_message_ud_req {
@@ -558,15 +578,23 @@ struct commit_fifo {
   uint16_t size;
 };
 
-struct w_message {
-  uint8_t flr_id;
+struct write {
+  uint8_t flr_id[4];
+  uint8_t session_id[4];
+  uint8_t key[TRUE_KEY_SIZE];	/* 8B */
   uint8_t opcode;
   uint8_t w_num;
-//  uint8_t value[];
+  uint8_t value[VALUE_SIZE];
 };
 
-struct w_messaage_ud_req {
+struct w_message {
+  struct write w[MAX_W_COALESCE];
+};
 
+struct w_message_ud_req {
+//  struct ibv_grh grh; // compiler puts padding with this
+	uint8_t unused[GRH_SIZE];
+  struct write writes[MAX_W_COALESCE];
 };
 
 struct thread_stats { // 2 cache lines

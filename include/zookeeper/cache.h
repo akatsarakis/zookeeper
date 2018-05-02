@@ -89,7 +89,7 @@ struct key {
 
 struct write_op {
   uint64_t g_id;
-  struct key key;	/* This must be the 1st field and 16B aligned */
+  struct key key;	/* 8B */
   uint8_t opcode;
   uint8_t val_len;
   uint8_t value[MICA_MAX_VALUE];

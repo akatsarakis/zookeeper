@@ -396,8 +396,7 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
     tag[I] = (*op)[I].key.tag;
 
     key_in_store[I] = 0;
-    kv_ptr[I] = NULL;
-  }
+    kv_ptr[I] = NULL;  }
 
   for(I = 0; I < op_num; I++) {
     for(j = 0; j < 8; j++) {
@@ -405,7 +404,6 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
          bkt_ptr[I]->slots[j].tag == tag[I]) {
         uint64_t log_offset = bkt_ptr[I]->slots[j].offset &
                               cache.hash_table.log_mask;
-
         /*
                  * We can interpret the log entry as mica_op, even though it
                  * may not contain the full MICA_MAX_VALUE value.
@@ -425,30 +423,22 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
       }
     }
   }
-
   // the following variables used to validate atomicity between a lock-free read of an object
-  cache_meta prev_meta;
   for(I = 0; I < op_num; I++) {
-    if(resp[I].type == UNSERVED_CACHE_MISS) continue;
     if(kv_ptr[I] != NULL) {
-
       /* We had a tag match earlier. Now compare log entry. */
       long long *key_ptr_log = (long long *) kv_ptr[I];
       long long *key_ptr_req = (long long *) &(*op)[I];
-
       if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
         key_in_store[I] = 1;
         if ((*op)[I].opcode == ZK_OP) {
-          assert((*op)[I].val_len == kv_ptr[I]->val_len);
+          if (ENABLE_ASSERTIONS) assert((*op)[I].val_len == kv_ptr[I]->val_len);
           optik_lock(&kv_ptr[I]->key.meta);
-          if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {
-            memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-            optik_unlock(&kv_ptr[I]->key.meta, (*op)[I].key.meta.cid, (*op)[I].key.meta.version);
-            resp[I].type = CACHE_UPD_SUCCESS;
-          } else {
-            optik_unlock_decrement_version(&kv_ptr[I]->key.meta);
-            resp[I].type = CACHE_UPD_FAIL;
-          }
+          memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
+          optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id,(uint32_t*) &(*op)[I].key.meta.version);
+          resp[I].val_len = 0;
+          resp[I].val_ptr = NULL;
+          resp[I].type = CACHE_PUT_SUCCESS;
         }
         else {
           red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
@@ -456,7 +446,6 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
         }
       }
     }
-
     if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
       resp[I].val_len = 0;
       resp[I].val_ptr = NULL;

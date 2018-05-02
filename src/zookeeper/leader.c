@@ -31,7 +31,7 @@ void *leader(void *arg)
   int ack_buf_push_ptr = 0, ack_buf_pull_ptr = -1;
   int w_buf_push_ptr = 0, w_buf_pull_ptr = -1;
   struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf);
-  struct ud_req *w_buffer = (struct ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
 	---------------------------------------------------------------------------*/
@@ -47,7 +47,7 @@ void *leader(void *arg)
 	if (WRITE_RATIO > 0) {
     // Pre post receives only for writes
     pre_post_recvs(cb, &w_buf_push_ptr, false, NULL, (void *)w_buffer,
-                   LEADER_W_BUF_SLOTS, LDR_MAX_RECV_W_WRS, COMMIT_W_QP_ID);
+                   LEADER_W_BUF_SLOTS, LDR_MAX_RECV_W_WRS, COMMIT_W_QP_ID, LDR_W_RECV_SIZE);
   }
 
 	/* -----------------------------------------------------
@@ -79,9 +79,8 @@ void *leader(void *arg)
 
  	uint16_t credits[LDR_VC_NUM][FOLLOWER_MACHINE_NUM];
 	uint16_t com_bcast_num = 0,
-    coh_message_count[LDR_VC_NUM][MACHINE_NUM],
-			inv_ops_i = 0, update_ops_i = 0, ack_ops_i, coh_buf_i = 0,
-			ack_push_ptr = 0, ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
+    coh_message_count[LDR_VC_NUM][MACHINE_NUM], coh_buf_i = 0,
+			ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
 			acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
 	uint32_t cmd_count = 0, credit_debug_cnt = 0;
 	uint32_t trace_iter = 0;
@@ -181,13 +180,14 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      com_bcast_num += propagate_updates(c_writes, p_writes, com_fifo, commit_resp);
+      propagate_updates(p_writes, com_fifo, commit_resp);
 
     /* ---------------------------------------------------------------------------
 		------------------------------ BROADCAST COMMITS--------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      broadcast_commits(c_writes, p_writes, credits, cb, &com_bcast_num, com_fifo,
+      if (com_bcast_num > 0)
+      broadcast_commits(c_writes, p_writes, credits, cb, com_fifo,
                         &commit_br_tx, &credit_debug_cnt, credit_wc,
                         com_send_sgl, com_send_wr, credit_recv_wr);
 

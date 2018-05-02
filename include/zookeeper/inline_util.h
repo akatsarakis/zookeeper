@@ -1505,7 +1505,7 @@ static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uin
 }
 
 // Handout global ids to  pending writes
-static inline void get_wids(struct pending_writes *p_writes, struct completed_writes *c_writes, uint16_t t_id)
+static inline void get_wids_depricated(struct pending_writes *p_writes, struct completed_writes *c_writes, uint16_t t_id)
 {
   uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)p_writes->unordered_writes_num, memory_order_relaxed);
   int i;
@@ -1527,19 +1527,43 @@ static inline void get_wids(struct pending_writes *p_writes, struct completed_wr
 //  exit(0);
 }
 
+
+// Handout global ids to  pending writes
+static inline void get_wids(struct pending_writes *p_writes, struct completed_writes *c_writes, uint16_t t_id)
+{
+	uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)p_writes->unordered_writes_num, memory_order_relaxed);
+	int i;
+	struct write_op *w_ops = p_writes->write_ops;
+	for (i = 0; i < p_writes->unordered_writes_num; ++i) {
+		uint32_t write_op_ptr = p_writes->unordered_writes[i];
+		if (ENABLE_ASSERTIONS) assert(w_ops[write_op_ptr].g_id == 0);
+		w_ops[write_op_ptr].g_id = id + i;
+		c_writes->p_writes_ptr[c_writes->push_ptr] = write_op_ptr;
+		c_writes->w_ops[c_writes->push_ptr] = &w_ops[write_op_ptr];
+		c_writes->w_state[c_writes->push_ptr] = VALID;
+		p_writes->c_write_ptr[write_op_ptr] = c_writes->push_ptr;
+		c_writes->push_ptr++;
+
+//    printf("Thread %d got id %lu for its write for session %d \n", t_id,  w_ops[write_op_ptr].g_id, write_op_ptr);
+	}
+	p_writes->unordered_writes_num = 0;
+//  sleep(10);
+//  exit(0);
+}
+
 /* ---------------------------------------------------------------------------
 //------------------------------ MAIN LOOP -----------------------------
 //---------------------------------------------------------------------------*/
 
-// Poll coherence region for LIN
-static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
+// Poll for acks in the leader
+static inline void poll_for_acks_depricated(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
                                  struct pending_writes *p_writes, struct completed_writes *c_writes,
                                  uint16_t credits[][FOLLOWER_MACHINE_NUM],
                                  struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
 {
   uint32_t index = (*pull_ptr + 1) % LEADER_ACK_BUF_SLOTS;
   uint32_t polled_messages = 0;
-  while (incoming_acks[index].ack.opcode ==  CACHE_OP_ACK) {
+  while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
     // printf("Leader  Opcode %d at offset %d at address %u \n",  incoming_acks[index].ack.opcode,
     // 			index, &(incoming_reqs[index]));
     struct ack_message *ack = &incoming_acks[index].ack;
@@ -1550,12 +1574,11 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
     }
     // assume that a cache line will be written atomically
     if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE) {
-      while (ack->global_id[(ack_num - 1) * 8] == 0); // spin until the entire message is there
+      while ((*(uint64_t *)(ack->global_id + (ack_num - 1) * sizeof(uint64_t))) == 0); // spin until the entire message is there
     }
     uint16_t  ack_i, w_i;
     for (ack_i = 0; ack_i < ack_num; ack_i++) {
-      uint64_t g_id;
-			memcpy(&g_id, &ack->global_id[ack_i * 8], sizeof(uint64_t));
+      uint64_t g_id = *(uint64_t *)(ack->global_id + ack_i * sizeof(uint64_t));
       for (w_i = 0; w_i < LEADER_PENDING_WRITES; w_i++) {
         if ( p_writes->w_state[w_i] != INVALID) {
           if (g_id == p_writes->write_ops[w_i].g_id) {
@@ -1584,7 +1607,7 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
 }
 
 // Add the acked gid to the appropriate commit message
-static inline void forge_commit_messsage(struct commit_fifo *com_fifo, struct completed_writes *c_writes)
+static inline void forge_commit_messsage_depricated(struct commit_fifo *com_fifo, struct completed_writes *c_writes)
 {
 	uint16_t com_mes_i = com_fifo->total_push_ptr;
 	struct com_message *commits = com_fifo->commits;
@@ -1602,25 +1625,155 @@ static inline void forge_commit_messsage(struct commit_fifo *com_fifo, struct co
 }
 
 // Propagate Updates that have seen all acks to the KVS
-static inline uint16_t propagate_updates(struct completed_writes *c_writes, struct pending_writes *p_writes,
-                                         struct commit_fifo *com_fifo, struct mica_resp *resp)
+static inline void propagate_updates_depricated(struct completed_writes *c_writes, struct pending_writes *p_writes,
+																		 struct commit_fifo *com_fifo, struct mica_resp *resp)
 {
-  uint16_t update_op_i = 0;
-  uint32_t pull_ptr = c_writes->pull_ptr;
-  //struct com_message *commits = com_fifo->commits;
-  while(c_writes->w_state[c_writes->pull_ptr] == READY) {
+	uint16_t update_op_i = 0;
+	uint32_t pull_ptr = c_writes->pull_ptr;
+	//struct com_message *commits = com_fifo->commits;
+	uint64_t committed_g_id = atomic_load_explicit(&committed_global_w_id, memory_order_relaxed);
+	while(c_writes->w_state[c_writes->pull_ptr] == READY) {
 		if (com_fifo->size == MAX_COM_COALESCE * COMMIT_FIFO_SIZE) break; // the commit fifo is full
-    update_op_i++;
-    c_writes->w_state[c_writes->pull_ptr] = INVALID;
-    p_writes->w_state[c_writes->p_writes_ptr[c_writes->pull_ptr]] =  INVALID;
-    // Add the acked gid to the appropriate commit message
-		forge_commit_messsage(com_fifo, c_writes);
-    MOD_ADD(c_writes->pull_ptr, LEADER_PENDING_WRITES);
-  }
-	if (update_op_i > 0)
-  	cache_batch_op_updates((uint32_t)update_op_i, 0, (struct cache_op **) &(c_writes->w_ops[pull_ptr]), resp);
-  return update_op_i;
+		if (c_writes->w_ops[c_writes->pull_ptr]->g_id != committed_g_id + 1) break;
+
+		c_writes->w_state[c_writes->pull_ptr] = INVALID;
+		p_writes->w_state[c_writes->p_writes_ptr[c_writes->pull_ptr]] = INVALID;
+		// Add the acked gid to the appropriate commit message
+		forge_commit_messsage_depricated(com_fifo, c_writes);
+		MOD_ADD(c_writes->pull_ptr, LEADER_PENDING_WRITES);
+		update_op_i++;
+		committed_g_id++;
+	}
+	if (update_op_i > 0) {
+		cache_batch_op_updates((uint32_t) update_op_i, 0, (struct cache_op **) &(c_writes->w_ops[pull_ptr]), resp);
+		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+	}
 }
+
+
+// Leader polls for acks
+static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
+																						struct pending_writes *p_writes, struct completed_writes *c_writes,
+																						uint16_t credits[][FOLLOWER_MACHINE_NUM],
+																						struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
+{
+	uint32_t index = (*pull_ptr + 1) % LEADER_ACK_BUF_SLOTS;
+	uint32_t polled_messages = 0;
+	while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
+		// printf("Leader  Opcode %d at offset %d at address %u \n",  incoming_acks[index].ack.opcode,
+		// 			index, &(incoming_reqs[index]));
+		struct ack_message *ack = &incoming_acks[index].ack;
+		uint16_t ack_num = incoming_acks[index].ack.ack_num;
+		if (ENABLE_ASSERTIONS) {
+			assert(ack_num < MAX_ACK_COALESCE);
+			assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
+		}
+		if (p_writes->size == 0) break;
+		// assume that a cache line will be written atomically
+		if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE) {
+			while ((*(uint64_t *)(ack->global_id + (ack_num - 1) * sizeof(uint64_t))) == 0); // spin until the entire message is there
+		}
+		for (uint16_t ack_i = 0; ack_i < ack_num; ack_i++) {
+			uint64_t g_id = *(uint64_t *)(ack->global_id + ack_i * sizeof(uint64_t));
+			uint16_t w_pull_ptr = p_writes->pull_ptr; uint32_t w_size = p_writes->size;
+			uint32_t last_w_ptr = (p_writes->push_ptr - 1) % LEADER_PENDING_WRITES;
+			if (g_id < p_writes->write_ops[w_pull_ptr].g_id) continue;
+			if (ENABLE_ASSERTIONS) assert(g_id <= p_writes->write_ops[last_w_ptr].g_id);
+			uint32_t p_write_id = (w_pull_ptr + (g_id - p_writes->write_ops[w_pull_ptr].g_id)) % LEADER_PENDING_WRITES;
+			while (p_write_id <= last_w_ptr) {
+				if (g_id == p_writes->write_ops[p_write_id].g_id) {
+					if (ENABLE_ASSERTIONS) assert(p_writes->acks_seen[p_write_id] < FOLLOWER_MACHINE_NUM);
+					p_writes->acks_seen[p_write_id]++;
+					if (p_writes->acks_seen[p_write_id] == LDR_QUORUM_OF_ACKS)
+						p_writes->w_state[p_write_id] = READY;
+					break;
+				}
+				else p_write_id++;
+			}
+			if (ENABLE_ASSERTIONS) assert(p_write_id <= last_w_ptr);
+		}
+		credits[PREP_VC][ack->follower_id] += ack_num; // increase credits
+		if (ENABLE_ASSERTIONS) assert(credits[PREP_VC][ack->follower_id] <= PREPARE_CREDITS);
+		if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE)
+			memset(ack, 0, (ack_num + 1) * sizeof(uint64_t)); // need to delete all the g_ids
+		else ack->opcode = 0; // if the ack is less than a cache line, then we are guaranteed the nIC will write it atomically
+		MOD_ADD_WITH_BASE(index, LEADER_ACK_BUF_SLOTS, 0);
+		polled_messages++;
+	} // while
+	*pull_ptr = index - 1;
+	if (ENABLE_ASSERTIONS) if (index == 0) assert(*pull_ptr == -1);
+
+	// Poll for the completion of the receives
+	hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
+}
+
+
+
+
+// Add the acked gid to the appropriate commit message
+static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g_id)
+{
+	uint16_t com_mes_i = com_fifo->total_push_ptr;
+	struct com_message *commits = com_fifo->commits;
+	uint16_t g_id_i = commits[com_mes_i].com_num;
+
+	commits[com_mes_i].g_id[g_id_i] = g_id;
+	commits[com_mes_i].com_num++;
+	com_fifo->size++;
+	if (commits[com_mes_i].com_num == MAX_COM_COALESCE)
+		MOD_ADD(com_fifo->total_push_ptr, COMMIT_FIFO_SIZE);
+	if (ENABLE_ASSERTIONS) {
+		assert(commits[com_mes_i].com_num <= MAX_COM_COALESCE);
+		assert(com_fifo->size <= MAX_COM_COALESCE * COMMIT_FIFO_SIZE);
+	}
+}
+
+// Propagate Updates that have seen all acks to the KVS
+static inline void propagate_updates(struct pending_writes *p_writes,
+																		 struct commit_fifo *com_fifo, struct mica_resp *resp)
+{
+	uint16_t update_op_i = 0;
+	uint32_t pull_ptr = p_writes->pull_ptr;
+	//struct com_message *commits = com_fifo->commits;
+	uint64_t committed_g_id = atomic_load_explicit(&committed_global_w_id, memory_order_relaxed);
+	while(p_writes->w_state[p_writes->pull_ptr] == READY) {
+		if (com_fifo->size == MAX_COM_COALESCE * COMMIT_FIFO_SIZE) break; // the commit fifo is full
+		if (p_writes->write_ops[p_writes->pull_ptr].g_id != committed_g_id + 1) break;
+		p_writes->w_state[p_writes->pull_ptr] = INVALID;
+
+		// Add the acked gid to the appropriate commit message
+		forge_commit_message(com_fifo, p_writes->write_ops[p_writes->pull_ptr].g_id);
+		MOD_ADD(p_writes->pull_ptr, LEADER_PENDING_WRITES);
+		update_op_i++;
+		committed_g_id++;
+	}
+	if (update_op_i > 0) {
+		struct cache_op * tmp_ptr = (struct cache_op *) &(p_writes->write_ops[pull_ptr]);
+		cache_batch_op_updates((uint32_t) update_op_i, 0, &tmp_ptr, resp);
+		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+	}
+}
+
+static inline void poll_for_writes(struct w_message_ud_req *incoming_ws, int *pull_ptr,
+																	 struct pending_writes *p_writes,
+																	 struct ibv_cq * w_recv_cq, struct ibv_wc *w_recv_wc)
+{
+	uint32_t index = (*pull_ptr + 1) % LEADER_W_BUF_SLOTS;
+	uint32_t polled_messages = 0;
+	while (incoming_ws[index].writes[0].opcode == CACHE_OP_PUT) {
+		// printf("Leader sees a write Opcode %d at offset %d at address %u \n",  incoming_ws[index].writes[0].opcode,
+		// 			index, &(incoming_ws[index]));
+		struct write *writes = incoming_ws[index].writes;
+		uint8_t w_num = incoming_ws[index].writes[0].w_num;
+		if(w_num > 1) {
+			while (writes[w_num].opcode != CACHE_OP_PUT); // spin until the entire message is there
+		}
+
+
+	}
+}
+
+
 
 /* ---------------------------------------------------------------------------
 //------------------------------ BROADCASTS -----------------------------
@@ -1733,15 +1886,15 @@ static inline void post_recvs_and_batch_bcasts_to_NIC(uint16_t br_i, struct hrd_
 // Leader broadcasts commits
 static inline void broadcast_commits(struct completed_writes *c_writes, struct pending_writes *p_writes,
                                      uint16_t credits[][FOLLOWER_MACHINE_NUM], struct hrd_ctrl_blk *cb,
-                                     uint16_t *com_bcast_num, struct commit_fifo *com_fifo,
-                                     long long *commit_br_tx, uint32_t *credit_debug_cnt, struct ibv_wc *credit_wc,
+                                     struct commit_fifo *com_fifo, long long *commit_br_tx,
+																		 uint32_t *credit_debug_cnt, struct ibv_wc *credit_wc,
                                      struct ibv_sge *com_send_sgl, struct ibv_send_wr *com_send_wr,
                                      struct ibv_recv_wr *credit_recv_wr)
 {
   uint8_t vc = COMM_VC;
   uint16_t commits_sent = 0, br_i = 0, credit_recv_counter = 0;
   uint16_t com_mes_i = 0;
-  while (*com_bcast_num > 0) {
+  while (com_fifo->size > 0) {
     // Check if there are enough credits for a Broadcast
     if (!check_bcast_credits(credits, cb, credit_wc, credit_debug_cnt, vc, protocol))
       break;
@@ -1768,9 +1921,8 @@ static inline void broadcast_commits(struct completed_writes *c_writes, struct p
       br_i = 0;
     }
   }
-  post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
-  if (ENABLE_ASSERTIONS) assert(commits_sent <= *com_bcast_num);
-  *com_bcast_num -= commits_sent;
+	if (br_i > 0)
+  	post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
 
 }
 
