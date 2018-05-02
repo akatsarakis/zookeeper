@@ -364,7 +364,7 @@ inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op
 }
 
 /* The leader sends the writes to be committed with this function*/
-inline void cache_batch_op_updates(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp)
+inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_op **op, struct mica_resp *resp)
 {
   int I, j;	/* I is batch index */
   long long stalled_brces = 0;
@@ -438,7 +438,7 @@ inline void cache_batch_op_updates(int op_num, int thread_id, struct cache_op **
 
       if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
         key_in_store[I] = 1;
-        if ((*op)[I].opcode == CACHE_OP_UPD) {
+        if ((*op)[I].opcode == ZK_OP) {
           assert((*op)[I].val_len == kv_ptr[I]->val_len);
           optik_lock(&kv_ptr[I]->key.meta);
           if (optik_is_greater_version(kv_ptr[I]->key.meta, (*op)[I].key.meta)) {

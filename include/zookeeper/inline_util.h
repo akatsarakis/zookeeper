@@ -566,7 +566,7 @@ static inline void issue_locals(uint16_t wn, uint16_t* ws, uint16_t local_client
 		else per_worker_outstanding[worker_id]++;
 		remote_for_each_worker[worker_id]++;
 		t_stats[local_client_id].locals_per_client++;
-		HRD_MOD_ADD(ws[wn], LOCAL_WINDOW);
+		MOD_ADD(ws[wn], LOCAL_WINDOW);
 		resp[op_i].type = EMPTY;
 	}
 	else {
@@ -588,7 +588,7 @@ static inline void send_credits(uint16_t credit_wr_i, struct ibv_sge* coh_recv_s
 		for (j = 0; j < credits_in_message; j++) {
 			recv_iter = i * credits_in_message + j;
 			coh_recv_sgl[recv_iter].addr = (uintptr_t) buf + ((*push_ptr) * UD_REQ_SIZE);
-			HRD_MOD_ADD(*push_ptr, clt_buf_slots);
+			MOD_ADD(*push_ptr, clt_buf_slots);
 			//			if (*push_ptr == 0) *push_ptr = 1;
 			coh_recv_wr[recv_iter].next = (recv_iter == (credit_wr_i * credits_in_message) - 1) ?
 										  NULL : &coh_recv_wr[recv_iter + 1];
@@ -901,7 +901,7 @@ static inline void poll_coherence_SC(uint16_t *coh_i, struct ud_req *incoming_re
 			}
 			break;
 		}
-		HRD_MOD_ADD(*pull_ptr, SC_CLT_BUF_SLOTS);
+		MOD_ADD(*pull_ptr, SC_CLT_BUF_SLOTS);
 		memcpy(update_ops + (*coh_i), &(incoming_reqs[*pull_ptr].m_op), HERD_PUT_REQ_SIZE);
 		update_resp[*coh_i].type = EMPTY;
 		// if (machine_id == 0); yellow_printf("CLIENT %d: I RECEIVED Broadcast %d at offset %d for key with tag  %d \n",
@@ -1046,7 +1046,7 @@ static inline void poll_coherence_LIN(uint16_t *update_ops_i, struct ud_req *inc
 		// firtsly deal with updates and acks
 		if (incoming_reqs[(*pull_ptr + 1) % LIN_CLT_BUF_SLOTS].m_op.opcode != CACHE_OP_INV) {
 			if (ack_size + ack_ops_i == BCAST_TO_CACHE_BATCH) break; // Back pressure from the incoming acks
-			HRD_MOD_ADD(*pull_ptr, LIN_CLT_BUF_SLOTS);
+			MOD_ADD(*pull_ptr, LIN_CLT_BUF_SLOTS);
 			uint8_t size_of_req = incoming_reqs[*pull_ptr].m_op.opcode == CACHE_OP_UPD ? HERD_PUT_REQ_SIZE : HERD_GET_REQ_SIZE;
 			memcpy(update_ops + *update_ops_i, &(incoming_reqs[*pull_ptr].m_op), size_of_req);
 			assert(update_ops[*update_ops_i].key.meta.cid < MACHINE_NUM);///
@@ -1065,7 +1065,7 @@ static inline void poll_coherence_LIN(uint16_t *update_ops_i, struct ud_req *inc
 		}
 		else { // invalidations get special treatment because they must not go to the cahce just yet
 			if (inv_size + *inv_ops_i == BCAST_TO_CACHE_BATCH) break; // Back pressure if no empty slots
-			HRD_MOD_ADD(*pull_ptr, LIN_CLT_BUF_SLOTS);
+			MOD_ADD(*pull_ptr, LIN_CLT_BUF_SLOTS);
 			memcpy(inv_ops + *inv_ops_i, &(incoming_reqs[*pull_ptr].m_op), HERD_GET_REQ_SIZE);
 			assert(inv_ops[*inv_ops_i].key.meta.cid < MACHINE_NUM);///
 			        yellow_printf("CLIENT %d I see a message %s for key %d with version %d, inv_ops_i %d\n", local_client_id,
@@ -1146,7 +1146,7 @@ static inline void updates_and_acks_bookkeeping(uint16_t update_ops_i, struct ca
 			if (ENABLE_ASSERTIONS == 1) assert(ack_bcast_ops[*ack_push_ptr].opcode != CACHE_OP_ACK);
 			ack_bcast_ops[*ack_push_ptr] = update_ops[i];
 			ack_bcast_ops[*ack_push_ptr].val_len = (HERD_VALUE_SIZE >> SHIFT_BITS);
-			HRD_MOD_ADD(*ack_push_ptr, BCAST_TO_CACHE_BATCH);
+			MOD_ADD(*ack_push_ptr, BCAST_TO_CACHE_BATCH);
 			(*ack_size)++;
 			if (unlikely(*ack_size > BCAST_TO_CACHE_BATCH)) printf("Error: the ack_size is bigger than allowed %d\n", *ack_size);
 		}
@@ -1232,7 +1232,7 @@ static inline void forge_bcast_wrs_LIN(uint16_t op_i, struct extended_cache_op *
 		t_stats[local_client_id].updates_per_client++;
 		//      green_printf("CLIENT %d : I BROADCAST with %s credits: %d, key: %d, cid: %d and version: %d \n", local_client_id, code_to_str(ack_bcast_ops[*ack_pop_ptr].opcode), credits[vc][(machine_id + 1) % MACHINE_NUM],
 		//                   ack_bcast_ops[*ack_pop_ptr].key.tag, ack_bcast_ops[*ack_pop_ptr].key.meta.cid, 	ack_bcast_ops[*ack_pop_ptr].key.meta.version);
-		HRD_MOD_ADD(*ack_pop_ptr, BCAST_TO_CACHE_BATCH);
+		MOD_ADD(*ack_pop_ptr, BCAST_TO_CACHE_BATCH);
 	}
 	// Do a Signaled Send every BROADCAST_SS_BATCH broadcasts (BROADCAST_SS_BATCH * (MACHINE_NUM - 1) messages)
 	if ((*br_tx) % BROADCAST_SS_BATCH == 0) coh_send_wr[0].send_flags |= IBV_SEND_SIGNALED;
@@ -1514,6 +1514,7 @@ static inline void get_wids(struct pending_writes *p_writes, struct completed_wr
     uint32_t write_op_ptr = p_writes->unordered_writes[i];
     if (ENABLE_ASSERTIONS) assert(w_ops[write_op_ptr].g_id == 0);
     w_ops[write_op_ptr].g_id = id + i;
+    c_writes->p_writes_ptr[c_writes->push_ptr] = write_op_ptr;
     c_writes->w_ops[c_writes->push_ptr] = &w_ops[write_op_ptr];
     c_writes->w_state[c_writes->push_ptr] = VALID;
     p_writes->c_write_ptr[write_op_ptr] = c_writes->push_ptr;
@@ -1549,11 +1550,12 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
     }
     // assume that a cache line will be written atomically
     if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE) {
-      while (ack->global_id[ack_num - 1] == 0); // spin until the entire message is there
+      while (ack->global_id[(ack_num - 1) * 8] == 0); // spin until the entire message is there
     }
     uint16_t  ack_i, w_i;
     for (ack_i = 0; ack_i < ack_num; ack_i++) {
-      uint64_t g_id = ack->global_id[ack_i];
+      uint64_t g_id;
+			memcpy(&g_id, &ack->global_id[ack_i * 8], sizeof(uint64_t));
       for (w_i = 0; w_i < LEADER_PENDING_WRITES; w_i++) {
         if ( p_writes->w_state[w_i] != INVALID) {
           if (g_id == p_writes->write_ops[w_i].g_id) {
@@ -1581,17 +1583,42 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
   hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
 }
 
-
+// Add the acked gid to the appropriate commit message
+static inline void forge_commit_messsage(struct commit_fifo *com_fifo, struct completed_writes *c_writes)
+{
+	uint16_t com_mes_i = com_fifo->total_push_ptr;
+	struct com_message *commits = com_fifo->commits;
+	uint16_t g_id_i = commits[com_mes_i].com_num;
+	uint16_t w_ops_ptr = c_writes->pull_ptr;
+	commits[com_mes_i].g_id[g_id_i] = c_writes->w_ops[w_ops_ptr]->g_id;
+	commits[com_mes_i].com_num++;
+	com_fifo->size++;
+	if (commits[com_mes_i].com_num == MAX_COM_COALESCE)
+		MOD_ADD(com_fifo->total_push_ptr, COMMIT_FIFO_SIZE);
+	if (ENABLE_ASSERTIONS) {
+		assert(commits[com_mes_i].com_num <= MAX_COM_COALESCE);
+		assert(com_fifo->size <= MAX_COM_COALESCE * COMMIT_FIFO_SIZE);
+	}
+}
 
 // Propagate Updates that have seen all acks to the KVS
-static inline uint16_t propagate_updates(struct completed_writes *c_writes, struct pending_writes *p_writes)
+static inline uint16_t propagate_updates(struct completed_writes *c_writes, struct pending_writes *p_writes,
+                                         struct commit_fifo *com_fifo, struct mica_resp *resp)
 {
   uint16_t update_op_i = 0;
-  while(c_writes->w_state[c_writes->com_pull_ptr] == READY) {
+  uint32_t pull_ptr = c_writes->pull_ptr;
+  //struct com_message *commits = com_fifo->commits;
+  while(c_writes->w_state[c_writes->pull_ptr] == READY) {
+		if (com_fifo->size == MAX_COM_COALESCE * COMMIT_FIFO_SIZE) break; // the commit fifo is full
     update_op_i++;
-    c_writes->w_state[c_writes->com_pull_ptr] = SEND_COMMITTS;
-    MOD_ADD_WITH_BASE(c_writes->com_pull_ptr, LEADER_PENDING_WRITES, 0);
+    c_writes->w_state[c_writes->pull_ptr] = INVALID;
+    p_writes->w_state[c_writes->p_writes_ptr[c_writes->pull_ptr]] =  INVALID;
+    // Add the acked gid to the appropriate commit message
+		forge_commit_messsage(com_fifo, c_writes);
+    MOD_ADD(c_writes->pull_ptr, LEADER_PENDING_WRITES);
   }
+	if (update_op_i > 0)
+  	cache_batch_op_updates((uint32_t)update_op_i, 0, (struct cache_op **) &(c_writes->w_ops[pull_ptr]), resp);
   return update_op_i;
 }
 
@@ -1650,16 +1677,16 @@ static inline bool check_bcast_credits(uint16_t credits[][FOLLOWER_MACHINE_NUM],
 
 
 // Form Broadcast work requests for the leader
-static inline void forge_commit_wrs(struct com_message *commits, uint16_t commits_per_message,
+static inline void forge_commit_wrs(struct com_message *commit,
                                    uint16_t com_i, struct hrd_ctrl_blk *cb, struct ibv_sge *com_send_sgl,
                                    struct ibv_send_wr *com_send_wr,  long long *commit_br_tx,
                                     uint16_t credits[][FOLLOWER_MACHINE_NUM])
 {
   struct ibv_wc signal_send_wc;
-  com_send_sgl[com_i].addr = (uint64_t) (uintptr_t) (commits + com_i);
-  com_send_sgl[com_i].length = sizeof(uint64_t) * (commits_per_message + 1);
+  com_send_sgl[com_i].addr = (uint64_t) (uintptr_t) commit;
+  com_send_sgl[com_i].length = sizeof(uint64_t) * (commit->com_num + 1);
   //green_printf("Leader %d : I BROADCAST a message with %d commits with %s credits: %d \n",
-     //          commits_per_message, code_to_str(commits[com_i].opcode), credits[COMM_VC][0]);
+     //          commit->com_num, code_to_str(commits[com_i].opcode), credits[COMM_VC][0]);
 
   // Do a Signaled Send every BROADCAST_SS_BATCH broadcasts (BROADCAST_SS_BATCH * (MACHINE_NUM - 1) messages)
   if ((*commit_br_tx) % COM_BCAST_SS_BATCH == 0) com_send_wr[0].send_flags |= IBV_SEND_SIGNALED;
@@ -1706,38 +1733,36 @@ static inline void post_recvs_and_batch_bcasts_to_NIC(uint16_t br_i, struct hrd_
 // Leader broadcasts commits
 static inline void broadcast_commits(struct completed_writes *c_writes, struct pending_writes *p_writes,
                                      uint16_t credits[][FOLLOWER_MACHINE_NUM], struct hrd_ctrl_blk *cb,
-                                     uint16_t *com_bcast_num, struct com_message *commits,
+                                     uint16_t *com_bcast_num, struct commit_fifo *com_fifo,
                                      long long *commit_br_tx, uint32_t *credit_debug_cnt, struct ibv_wc *credit_wc,
                                      struct ibv_sge *com_send_sgl, struct ibv_send_wr *com_send_wr,
                                      struct ibv_recv_wr *credit_recv_wr)
 {
-  uint8_t vc;
+  uint8_t vc = COMM_VC;
   uint16_t commits_sent = 0, br_i = 0, credit_recv_counter = 0;
   uint16_t com_mes_i = 0;
   while (*com_bcast_num > 0) {
     // Check if there are enough credits for a Broadcast
     if (!check_bcast_credits(credits, cb, credit_wc, credit_debug_cnt, vc, protocol))
       break;
-    assert(COM_ENABLE_INLINING); // TODO buffer space needs to be handled carefully to support not inlining
-    uint16_t commits_per_message = MIN((*com_bcast_num), MAX_COM_COALESCE);
-    commits[com_mes_i].com_num = commits_per_message;
-    for (uint16_t i = 0; i < commits_per_message; i++) {
-      uint16_t bcast_pull_ptr = c_writes->bcast_pull_ptr;
-      commits[com_mes_i].g_id[i] = c_writes->w_ops[bcast_pull_ptr]->g_id;
-      c_writes->w_state[bcast_pull_ptr] = INVALID;
-      p_writes->
-      MOD_ADD_WITH_BASE(c_writes->bcast_pull_ptr, LEADER_PENDING_WRITES, 0);
-    }
+		struct com_message *commit = &com_fifo->commits[com_fifo->pull_ptr];
     // Create the broadcast messages
-    forge_commit_wrs(commits, commits_per_message, com_mes_i, cb, com_send_sgl,
+    forge_commit_wrs(commit, com_mes_i, cb, com_send_sgl,
                      com_send_wr,  commit_br_tx, credits);
     (*commit_br_tx)++;
     for (uint16_t j = 0; j < FOLLOWER_MACHINE_NUM; j++) { credits[COMM_VC][j]--; }
     if ((*commit_br_tx) % CREDITS_IN_MESSAGE == 0) credit_recv_counter++;
     com_mes_i++;
-    if (ENABLE_ASSERTIONS) assert(com_mes_i <= COMMIT_CREDITS);
-    commits_sent += commits_per_message;
+    commits_sent += commit->com_num;
+		com_fifo->size -= commit->com_num;
+		MOD_ADD(com_fifo->pull_ptr, COMMIT_FIFO_SIZE);
     br_i++;
+		if (ENABLE_ASSERTIONS) {
+			assert(com_mes_i <= COMMIT_CREDITS);
+			assert(com_fifo->size <= COMMIT_FIFO_SIZE * MAX_COM_COALESCE);
+			assert(commit->com_num > 0 && commit->com_num < MAX_COM_COALESCE);
+		}
+		commit->com_num = 0;
     if (br_i == MAX_BCAST_BATCH) {
       post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
       br_i = 0;
@@ -1795,7 +1820,7 @@ static inline void forge_bcast_wrs(uint16_t op_i, struct pending_writes *p_write
     t_stats[t_id].updates_per_client++;
     //      green_printf("CLIENT %d : I BROADCAST with %s credits: %d, key: %d, cid: %d and version: %d \n", t_id, code_to_str(ack_bcast_ops[*ack_pop_ptr].opcode), credits[vc][(machine_id + 1) % MACHINE_NUM],
     //                   ack_bcast_ops[*ack_pop_ptr].key.tag, ack_bcast_ops[*ack_pop_ptr].key.meta.cid, 	ack_bcast_ops[*ack_pop_ptr].key.meta.version);
-    HRD_MOD_ADD(*ack_pop_ptr, BCAST_TO_CACHE_BATCH);
+    MOD_ADD(*ack_pop_ptr, BCAST_TO_CACHE_BATCH);
     (*commit_br_tx)++;
   }
   // Do a Signaled Send every BROADCAST_SS_BATCH broadcasts (BROADCAST_SS_BATCH * (MACHINE_NUM - 1) messages)
@@ -1820,7 +1845,7 @@ static inline void post_recvs(struct ibv_sge* recv_sgl,
   struct ibv_recv_wr *bad_recv_wr;
   for (j = 0; j < recv_num; j++) {
     recv_sgl[j].addr = (uintptr_t) buf + ((*push_ptr) * UD_REQ_SIZE);
-    HRD_MOD_ADD(*push_ptr, buf_slots);
+    MOD_ADD(*push_ptr, buf_slots);
     //			if (*push_ptr == 0) *push_ptr = 1;
     recv_wr[j].next = (j == recv_num - 1) ?
                           NULL : &recv_wr[j + 1];
@@ -1995,7 +2020,7 @@ static inline void perform_broadcasts(uint16_t *ack_size, struct pending_writes 
 //				}
 //			if ((*qp_i)  == FOLLOWER_QP_NUM -1) return break_; // all qp buffers were checked
 //			else {
-//				HRD_MOD_ADD((*qp_i) , FOLLOWER_QP_NUM);
+//				MOD_ADD((*qp_i) , FOLLOWER_QP_NUM);
 //				return continue_; // move to the next buffer
 //			}
 //		}

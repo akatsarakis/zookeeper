@@ -202,7 +202,7 @@ void set_up_the_buffer_space(uint16_t clts_per_qp[], uint32_t per_qp_buf_slots[]
 //    for (i = 0; i < LEADERS_PER_MACHINE; i++) {
 //        assert(qp < FOLLOWER_QP_NUM);
 //        clts_per_qp[qp]++;
-//        HRD_MOD_ADD(qp, FOLLOWER_QP_NUM);
+//        MOD_ADD(qp, FOLLOWER_QP_NUM);
 //    }
     for (i = 0; i < MACHINE_NUM; i++) {
         if (i == machine_id) continue;
@@ -611,7 +611,7 @@ void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essenti
             }
             else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
                                      (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
-            HRD_MOD_ADD(*push_ptr, max_reqs);
+            MOD_ADD(*push_ptr, max_reqs);
             //if (*push_ptr == 0) *push_ptr = 1;
         }
     }
@@ -991,7 +991,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 
 
   for (i = 0; i < size; i++) {
-    (*p_writes)->write_ops[i].opcode = CACHE_OP_BRC;
+    (*p_writes)->write_ops[i].opcode = ZK_OP;
     (*p_writes)->write_ops[i].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
     (*p_writes)->w_state[i] = INVALID;
   }
@@ -1004,9 +1004,11 @@ void set_up_completed_writes(struct completed_writes **c_writes, uint32_t size)
   int i;
   (*c_writes)->w_ops = (struct write_op**) malloc(size * sizeof(struct write_op*));
   (*c_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
+  (*c_writes)->p_writes_ptr = (uint32_t*) malloc(size * sizeof(uint32_t));
   memset((*c_writes)->w_ops, 0, size * sizeof(struct write_op));
+  memset((*c_writes)->p_writes_ptr, 0, size * sizeof(uint32_t));
   (*c_writes)->push_ptr = 0;
-  (*c_writes)->com_pull_ptr = 0; (*c_writes)->bcast_pull_ptr = 0;
+  (*c_writes)->pull_ptr = 0;
   for (i = 0; i < size; i++) {
     (*c_writes)->w_state[i] = INVALID;
   }
@@ -1062,7 +1064,7 @@ void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, bool enable_mcast_re
       }
       else hrd_post_dgram_recv(cb->dgram_qp[QP_ID],
                                (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
-      HRD_MOD_ADD(*push_ptr, max_reqs);
+      MOD_ADD(*push_ptr, max_reqs);
   }
 }
 
@@ -1082,11 +1084,14 @@ void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
   (*com_fifo)->commits = (struct com_message *) malloc(COMMIT_FIFO_SIZE * sizeof(struct com_message));
   *resp = memalign(4096, CACHE_BATCH_SIZE * mica_resp_size);
   *commit_resp = memalign(4096, LEADER_PENDING_WRITES * mica_resp_size);
-  (*com_fifo)->push_ptr = 0; (*com_fifo)->pull_ptr = 0;
-  (*com_fifo)->size = 0;
+  memset((*com_fifo)->commits, 0, COMMIT_FIFO_SIZE * sizeof(struct com_message));
+  (*com_fifo)->total_push_ptr = 0;
+  (*com_fifo)->pull_ptr = 0; (*com_fifo)->size = 0;
   for(i = 0; i <  CACHE_BATCH_SIZE; i++) (*resp)[i].type = EMPTY;
   for(i = 0; i <  LEADER_PENDING_WRITES; i++) (*commit_resp)[i].type = EMPTY;
-  for(i = 0; i <  COMMIT_CREDITS; i++) (*com_fifo)->commits[i].opcode = Z_OP_COMMIT;
+  for(i = 0; i <  COMMIT_CREDITS; i++) {
+      (*com_fifo)->commits[i].opcode = ZK_OP;
+  }
   assert(*ops != NULL && *resp != NULL && *commit_resp != NULL && *buf != NULL);
 
 }

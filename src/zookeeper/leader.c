@@ -181,32 +181,17 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      com_bcast_num += propagate_updates(c_writes, p_writes, com_fifo);
+      com_bcast_num += propagate_updates(c_writes, p_writes, com_fifo, commit_resp);
 
     /* ---------------------------------------------------------------------------
 		------------------------------ BROADCAST COMMITS--------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      broadcast_commits(c_writes, p_writes, credits, cb, &com_bcast_num, commits,
+      broadcast_commits(c_writes, p_writes, credits, cb, &com_bcast_num, com_fifo,
                         &commit_br_tx, &credit_debug_cnt, credit_wc,
                         com_send_sgl, com_send_wr, credit_recv_wr);
 
 
-		/* ---------------------------------------------------------------------------
-		------------------------------SEND UPDS AND ACKS TO THE CACHE------------------
-		---------------------------------------------------------------------------*/
-		if (WRITE_RATIO > 0) {
-			// Propagate updates and acks to the cache, find all acks that are complete to broadcast updates
-			if (ENABLE_ASSERTIONS == 1) assert(update_ops_i <= BCAST_TO_CACHE_BATCH);
-			if (update_ops_i > 0) {
-//				cache_batch_op_lin_non_stalling_sessions_with_cache_op(update_ops_i, t_id, &update_ops,
-//																	   update_resp);
-				// the bookkeeping involves the wak-up logic and the latency measurement for the hot writes
-//				updates_and_acks_bookkeeping(update_ops_i, update_ops, &latency_info, ops, &start,
-//											 t_id, resp, update_resp, coh_message_count,
-//											 ack_bcast_ops, &ack_push_ptr, &ack_size);
-			}
-		}
 		/* ---------------------------------------------------------------------------
 		------------------------------PROBE THE CACHE--------------------------------------
 		---------------------------------------------------------------------------*/
@@ -218,6 +203,8 @@ void *leader(void *arg)
                                                   &latency_info, &start);
     // Assign a global write  id to each new write
     get_wids(p_writes, c_writes, t_id);
+
+
 
 
 		/* ---------------------------------------------------------------------------

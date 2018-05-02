@@ -62,6 +62,19 @@ int main(int argc, char *argv[])
   assert(sizeof(struct ack_message_ud_req) == LDR_ACK_RECV_SIZE);
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
 
+  uint8_t aek[16];
+  uint64 random_id = 123456789;
+  uint64_t random_id2 = 473261955;
+  memcpy(aek, &random_id, sizeof(uint64_t));
+  memcpy(aek + 8, &random_id2, sizeof(uint64_t));
+  uint64_t random_id3, random_id4;
+  memcpy(&random_id3, aek, sizeof(uint64_t));
+  memcpy(&random_id4, aek + 8,  sizeof(uint64_t));
+
+  printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu \n",
+         random_id3, random_id4);
+
+
 	int i, c;
 	num_threads = -1;
 	is_roce = -1; machine_id = -1;

@@ -106,7 +106,7 @@
 #define USE_HUGE_PAGES 1
 // </akatsarakis>
 /* Useful when `x = (x + 1) % N` is done in a loop */
-#define HRD_MOD_ADD(x, N) do { \
+#define MOD_ADD(x, N) do { \
 	x = x + 1; \
 	if(x == N) { \
 		x = 0; \

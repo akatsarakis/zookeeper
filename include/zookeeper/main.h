@@ -515,8 +515,8 @@ struct pending_writes {
 struct completed_writes {
   struct write_op **w_ops; // FIFO QUEUE that points to the next write to commit
   enum write_state *w_state;
-  uint16_t com_pull_ptr;
-  uint16_t bcast_pull_ptr;
+  uint32_t *p_writes_ptr;
+  uint16_t pull_ptr;
   uint16_t push_ptr;
 
 };
@@ -526,8 +526,8 @@ struct ack_message {
   uint8_t follower_id;
   uint8_t opcode;
   uint16_t ack_num;
+  uint8_t global_id[MAX_ACK_COALESCE * 8];
   uint8_t unused[4];
-  uint64_t global_id[MAX_ACK_COALESCE];
 };
 
 struct ack_message_ud_req {
@@ -553,9 +553,20 @@ struct com_message_ud_req {
 
 struct commit_fifo {
   struct com_message *commits;
-  uint16_t push_ptr;
+  uint16_t total_push_ptr;
   uint16_t pull_ptr;
   uint16_t size;
+};
+
+struct w_message {
+  uint8_t flr_id;
+  uint8_t opcode;
+  uint8_t w_num;
+//  uint8_t value[];
+};
+
+struct w_messaage_ud_req {
+
 };
 
 struct thread_stats { // 2 cache lines
