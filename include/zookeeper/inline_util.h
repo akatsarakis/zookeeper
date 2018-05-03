@@ -1548,43 +1548,50 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
 		// printf("Leader  Opcode %d at offset %d at address %u \n",  incoming_acks[index].ack.opcode,
 		// 			index, &(incoming_reqs[index]));
 		struct ack_message *ack = &incoming_acks[index].ack;
-		uint16_t ack_num = ack->ack_num;
+		uint16_t ack_coalesce_num = ack->coalesce_num;
+//		uint16_t ack_num = ack->ack_num;
 		MOD_ADD_WITH_BASE(index, LEADER_ACK_BUF_SLOTS, 0);
 		polled_messages++;
 		credits[PREP_VC][ack->follower_id] += ack_num; // increase credits
 		// if the pending write FIFO is empty it means the acks are for committed messages.
 		if (p_writes->size == 0) { memset(ack, 0, (2) * sizeof(uint64_t)); continue; }
-
-		if (ENABLE_ASSERTIONS) {
-			assert(ack_num < MAX_ACK_COALESCE);
-			assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
-		}
-		// spin until the entire message is there
-		while ((*(uint64_t *) (ack->global_id)) == 0);
-		uint64_t g_id = *(uint64_t *) (ack->global_id);
-		uint16_t w_pull_ptr = p_writes->pull_ptr; //uint32_t w_size = p_writes->size;
-		uint32_t last_w_ptr = (LEADER_PENDING_WRITES + p_writes->push_ptr - 1) % LEADER_PENDING_WRITES;
-		// if all acks refer to already committed writes then go on
-		if (g_id < p_writes->write_ops[w_pull_ptr].g_id) { memset(ack, 0, FLR_ACK_SEND_SIZE); continue; }
-		if (ENABLE_ASSERTIONS) assert(g_id <= p_writes->write_ops[last_w_ptr].g_id);
-		g_id = g_id - (ack_num - 1); // find the first g_id that is acked
-		uint16_t not_committed_ack_num = ack_num;
-		while (g_id < p_writes->write_ops[w_pull_ptr].g_id) {g_id++; not_committed_ack_num--;}
-		uint32_t p_write_id = (w_pull_ptr + (g_id - p_writes->write_ops[w_pull_ptr].g_id)) % LEADER_PENDING_WRITES;
-		while (p_write_id <= last_w_ptr) {
-			if (g_id == p_writes->write_ops[p_write_id].g_id) {
-				if (ENABLE_ASSERTIONS) assert(p_writes->acks_seen[p_write_id] < FOLLOWER_MACHINE_NUM);
-				for (uint16_t i = 0; i < not_committed_ack_num; i++) {
-					p_writes->acks_seen[p_write_id + i]++;
-					if (p_writes->acks_seen[p_write_id + i] == LDR_QUORUM_OF_ACKS)
-						p_writes->w_state[p_write_id + i] = READY;
-				}
-				break;
+		for (uint16_t ack_i = 0; ack_i < ack_coalesce_num; ack_i++) {
+			if (ENABLE_ASSERTIONS) {
+				assert(ack_num < MAX_GIDS_IN_AN_ACK);
+				assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
 			}
-			else p_write_id++;
+			// spin until the entire message is there
+			while ((*(uint64_t *) (ack->global_id)) == 0);
+			uint64_t g_id = *(uint64_t *) (ack->global_id);
+			uint16_t w_pull_ptr = p_writes->pull_ptr; //uint32_t w_size = p_writes->size;
+			uint32_t last_w_ptr = (LEADER_PENDING_WRITES + p_writes->push_ptr - 1) % LEADER_PENDING_WRITES;
+			// if all acks refer to already committed writes then go on
+			if (g_id < p_writes->write_ops[w_pull_ptr].g_id) {
+				memset(ack, 0, FLR_ACK_SEND_SIZE);
+				continue;
+			}
+			if (ENABLE_ASSERTIONS) assert(g_id <= p_writes->write_ops[last_w_ptr].g_id);
+			g_id = g_id - (ack_num - 1); // find the first g_id that is acked
+			uint16_t not_committed_ack_num = ack_num;
+			while (g_id < p_writes->write_ops[w_pull_ptr].g_id) {
+				g_id++;
+				not_committed_ack_num--;
+			}
+			uint32_t p_write_id = (w_pull_ptr + (g_id - p_writes->write_ops[w_pull_ptr].g_id)) % LEADER_PENDING_WRITES;
+			while (p_write_id <= last_w_ptr) {
+				if (g_id == p_writes->write_ops[p_write_id].g_id) {
+					if (ENABLE_ASSERTIONS) assert(p_writes->acks_seen[p_write_id] < FOLLOWER_MACHINE_NUM);
+					for (uint16_t i = 0; i < not_committed_ack_num; i++) {
+						p_writes->acks_seen[p_write_id + i]++;
+						if (p_writes->acks_seen[p_write_id + i] == LDR_QUORUM_OF_ACKS)
+							p_writes->w_state[p_write_id + i] = READY;
+					}
+					break;
+				} else p_write_id++;
+			}
+			if (ENABLE_ASSERTIONS) assert(p_write_id <= last_w_ptr);
+			if (ENABLE_ASSERTIONS) assert(credits[PREP_VC][ack->follower_id] <= PREPARE_CREDITS);
 		}
-		if (ENABLE_ASSERTIONS) assert(p_write_id <= last_w_ptr);
-		if (ENABLE_ASSERTIONS) assert(credits[PREP_VC][ack->follower_id] <= PREPARE_CREDITS);
 		//if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE)
 		memset(ack, 0, FLR_ACK_SEND_SIZE); // need to delete all the g_ids
 		//else ack->opcode = 0; // if the ack is less than a cache line, then we are guaranteed the nIC will write it atomically
@@ -1610,7 +1617,7 @@ static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g
 		if (commit_messages[com_mes_i].coalesce_num == 0)
 			last_com_mes_i = (COMMIT_FIFO_SIZE + com_mes_i - 1) % COMMIT_FIFO_SIZE;
 		else last_com_mes_i = com_mes_i;
-		inner_commit_i = commit_messages[last_com_mes_i].coalesce_num - 1;
+		inner_commit_i = commit_messages[last_com_mes_i].coalesce_num - 1; // coalesce_num is bigger than 0 in any existing message
 		if (ENABLE_ASSERTIONS) assert(inner_commit_i < MAX_COM_COALESCE);
 		struct commit *last_commit = &commit_messages[last_com_mes_i].commit[inner_commit_i];
 		uint64_t last_g_id = *(uint64_t *) &last_commit->g_id;
@@ -1632,7 +1639,7 @@ static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g
 	com_fifo->size++; // this represents the number of commits
 	if (commit_messages[com_mes_i].coalesce_num ==  MAX_COM_COALESCE) {
 		MOD_ADD(com_fifo->push_ptr, COMMIT_FIFO_SIZE);
-		commit_messages[com_fifo->push_ptr].coalesce_num = 0;
+		commit_messages[com_fifo->push_ptr].coalesce_num = 1;
 	}
 	if (ENABLE_ASSERTIONS) {
 		assert(com_fifo->size <= COMMIT_FIFO_SIZE * MAX_COM_COALESCE);
@@ -1677,14 +1684,14 @@ static inline void poll_for_writes(struct w_message_ud_req *incoming_ws, int *pu
 																	 struct ibv_cq * w_recv_cq, struct ibv_wc *w_recv_wc)
 {
 	if (p_writes->size == LEADER_PENDING_WRITES) return;
-	if (ENABLE_ASSERTIONS) assert(p_writes < LEADER_PENDING_WRITES);
+	if (ENABLE_ASSERTIONS) assert(p_writes->size < LEADER_PENDING_WRITES);
 	uint32_t index = (*pull_ptr + 1) % LEADER_W_BUF_SLOTS;
 	uint32_t polled_messages = 0;
 	// Start polling
 	while (incoming_ws[index].writes[0].opcode == CACHE_OP_PUT) {
 		// printf("Leader sees a write Opcode %d at offset %d at address %u \n",  incoming_ws[index].writes[0].opcode,
 		// 			index, &(incoming_ws[index]));
-		struct write *writes = incoming_ws[index].writes;
+		struct w_message *writes = incoming_ws[index].writes;
 		uint8_t w_num = incoming_ws[index].writes[0].w_num;
 		// Check if the entire message can be moved to the buffer, if not drop it
 		if (LEADER_PENDING_WRITES - p_writes->size < w_num ) return;
@@ -1874,7 +1881,7 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
     for (uint16_t j = 0; j < FOLLOWER_MACHINE_NUM; j++) { credits[COMM_VC][j]--; }
     if ((*commit_br_tx) % CREDITS_IN_MESSAGE == 0) credit_recv_counter++;
 		for (uint16_t i = 0; i < com_mes->coalesce_num; i++)
-    	commits_sent += com_mes->commit[i].com_num;
+			commits_sent += com_mes->commit[i].com_num;
 		com_fifo->size-= com_mes->coalesce_num;
 		// DOn@T zero the coalesce_num yet because there may be no INLINING
 		MOD_ADD(com_fifo->pull_ptr, COMMIT_FIFO_SIZE);
@@ -2018,8 +2025,8 @@ static inline void perform_broadcasts(uint16_t *ack_size, struct pending_writes 
     op_i++;
     if (br_i == MAX_BCAST_BATCH) {
       if (prepare_num > 0) {
-        post_recvs(coh_recv_sgl, push_ptr, coh_recv_wr, coh_recv_qp,
-                   clt_buf_slots, buf, FOLLOWER_MACHINE_NUM * prepare_num, LDR_ACK_RECV_SIZE);
+//        post_recvs(coh_recv_sgl, push_ptr, coh_recv_wr, coh_recv_qp,
+//                   clt_buf_slots, buf, FOLLOWER_MACHINE_NUM * prepare_num, LDR_ACK_RECV_SIZE);
         prepare_num = 0;
       }
       post_recvs_and_batch_bcasts_to_NIC(br_i, cb, coh_send_wr, credit_recv_wr, &credit_recv_counter, PREP_ACK_QP_ID);
@@ -2027,8 +2034,8 @@ static inline void perform_broadcasts(uint16_t *ack_size, struct pending_writes 
     }
   }
   if (prepare_num > 0) {
-    post_recvs(coh_recv_sgl, push_ptr, coh_recv_wr, coh_recv_qp,
-               clt_buf_slots, buf, FOLLOWER_MACHINE_NUM * prepare_num, LDR_ACK_RECV_SIZE);
+//    post_recvs(coh_recv_sgl, push_ptr, coh_recv_wr, coh_recv_qp,
+//               clt_buf_slots, buf, FOLLOWER_MACHINE_NUM * prepare_num, LDR_ACK_RECV_SIZE);
   }
   post_recvs_and_batch_bcasts_to_NIC(br_i, cb, coh_send_wr, credit_recv_wr, &credit_recv_counter, PREP_ACK_QP_ID);
   (*ack_size) -= updates_sent;

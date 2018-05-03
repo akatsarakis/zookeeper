@@ -262,7 +262,10 @@
 
 // -------ACKS-------------
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
-#define MAX_ACK_COALESCE 20000
+#define MAX_GIDS_IN_AN_ACK K_64_
+#define ACK_SIZE 10
+#define MAX_ACK_COALESCE 5
+#define COM_ACK_HEADER_SIZE 4 // follower id, opcode, coalesce_num
 #define FLR_ACK_SEND_SIZE (12) // a write global id and its metadata
 #define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
 
@@ -270,8 +273,8 @@
 // -- COMMITS-----
 #define MAX_GIDS_IN_A_COMMIT K_64_
 #define COM_SIZE 10 // gid(8) + com_num(2)
-#define COM_MES_HEADER_SIZE 3 // opcode + coalesce num
-#define MAX_COM_COALESCE 6
+#define COM_MES_HEADER_SIZE 4 // opcode + coalesce num
+#define MAX_COM_COALESCE 2
 #define LDR_COM_SEND_SIZE (MAX_COM_COALESCE * COM_SIZE + COM_MES_HEADER_SIZE)
 #define FLR_COM_RECV_SIZE (GRH_SIZE + LDR_COM_SEND_SIZE)
 #define COM_ENABLE_INLINING ((LDR_COM_SEND_SIZE < MAXIMUM_INLINE_SIZE) ? 1: 0)
@@ -547,17 +550,23 @@ struct completed_writes {
 
 };
 
-// The format of an ack repsonse
+struct ack {
+	uint16_t ack_num;
+	uint8_t global_id[8];
+};
+
+// The format of an ack message
 struct ack_message {
   uint8_t follower_id;
   uint8_t opcode;
-  uint16_t ack_num;
-  uint8_t global_id[8];
-//  uint8_t unused[4];
+  uint16_t coalesce_num;
+  struct ack ack[MAX_GIDS_IN_AN_ACK];
+
 };
 
+
 struct ack_message_ud_req {
-  struct ibv_grh grh;
+	uint8_t unused[GRH_SIZE];
   struct ack_message ack;
 
  };
@@ -569,13 +578,14 @@ struct commit {
 
 // The format of a commit message
 struct com_message {
-  uint8_t opcode;
   uint16_t coalesce_num;
+	uint16_t opcode;
+	//uint8_t commit[MAX_COM_COALESCE * COM_SIZE];
 	struct commit commit[MAX_COM_COALESCE];
 };
 
 struct com_message_ud_req {
-  struct ibv_grh grh;
+	uint8_t unused[GRH_SIZE];
   struct com_message com;
 
 };

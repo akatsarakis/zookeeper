@@ -52,6 +52,15 @@ int main(int argc, char *argv[])
 	/* Cannot coalesce beyond 11 reqs, because when inlining is open it must be used, because NIC will read asynchronously otherwise */
 //	if (LEADER_ENABLE_INLINING == 1) assert((MAX_COALESCE_PER_MACH * HERD_GET_REQ_SIZE) + 1 <= MAXIMUM_INLINE_SIZE);
 
+
+  green_printf("COMMIT: commit size %lu/%d, commit message %lu/%d, commit message ud req %llu/%d\n",
+               sizeof(struct commit), COM_SIZE, sizeof(struct com_message), LDR_COM_SEND_SIZE,
+               sizeof(struct com_message_ud_req), FLR_COM_RECV_SIZE);
+  cyan_printf("ACK: ack size %lu/%d, ack message %lu/%d, ack message ud req %llu/%d\n",
+               sizeof(struct ack), ACK_SIZE, sizeof(struct ack_message), FLR_ACK_SEND_SIZE,
+               sizeof(struct ack_message_ud_req), LDR_ACK_RECV_SIZE);
+
+
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
@@ -63,12 +72,17 @@ int main(int argc, char *argv[])
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
 
 
-  printf("size of a write %lu, size of write recv slot %d size of w_message %lu , "
+  yellow_printf("WRITE: size of write recv slot %d size of w_message %lu , "
            "value size %d, size of cache op %lu , sizeof udreq w message %lu \n",
-         sizeof(struct write), LDR_W_RECV_SIZE, sizeof(struct w_message), VALUE_SIZE,
+         LDR_W_RECV_SIZE, sizeof(struct w_message), VALUE_SIZE,
          sizeof(struct cache_op), sizeof(struct w_message_ud_req));
   assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(sizeof(struct w_message) == FLR_W_SEND_SIZE);
+
+
+
+
+
   uint8_t aek[16];
   uint64 random_id = 123456789;
   uint64_t random_id2 = 473261955;
