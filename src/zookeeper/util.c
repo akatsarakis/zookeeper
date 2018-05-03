@@ -682,7 +682,7 @@ void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struc
     char dgram_qp_name[QP_NAME_SIZE];
     sprintf(dgram_qp_name, "%s-%d-%d", qp_name, global_id, qp_i);
     hrd_publish_dgram_qp(cb, qp_i, dgram_qp_name, DEFAULT_SL);
-//    printf("Thread %d published dgram %s \n", global_id, dgram_qp_name);
+//    printf("Thread %d published dgram %s \n", local_id, dgram_qp_name);
   }
 }
 
@@ -713,7 +713,7 @@ void setup_connections_and_spawn_stats_thread(int global_id, struct hrd_ctrl_blk
         while (atomic_load_explicit(&qps_are_set_up, memory_order_acquire)== 0);  usleep(200000);
     }
     assert(qps_are_set_up == 1);
-    //printf("Thread %d has all the needed ahs\n", global_id );
+    //printf("Thread %d has all the needed ahs\n", local_id );
 }
 
 // set up the OPS buffers

@@ -9,6 +9,7 @@ void *leader(void *arg)
 	uint16_t t_id = params.id;
 	uint16_t follower_qp_i = t_id % FOLLOWER_QP_NUM;
   uint16_t follower_id = t_id;
+  //uint64_t local_w_id = 1;
 
 	if (ENABLE_MULTICAST == 1 && t_id == 0) {
 		red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");

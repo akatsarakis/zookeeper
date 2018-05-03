@@ -262,16 +262,16 @@
 
 // -------ACKS-------------
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
-#define MAX_GIDS_IN_AN_ACK K_64_
-#define ACK_SIZE 10
+#define MAX_LIDS_IN_AN_ACK K_64_
+#define ACK_SIZE 12
 #define MAX_ACK_COALESCE 5
 #define COM_ACK_HEADER_SIZE 4 // follower id, opcode, coalesce_num
-#define FLR_ACK_SEND_SIZE (12) // a write global id and its metadata
+#define FLR_ACK_SEND_SIZE (12) // a local global id and its metadata
 #define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
 
 
 // -- COMMITS-----
-#define MAX_GIDS_IN_A_COMMIT K_64_
+#define MAX_LIDS_IN_A_COMMIT K_64_
 #define COM_SIZE 10 // gid(8) + com_num(2)
 #define COM_MES_HEADER_SIZE 4 // opcode + coalesce num
 #define MAX_COM_COALESCE 2
@@ -527,6 +527,7 @@ struct pending_writes {
 	// The first half of this array is session based and
 	// the second half is a fifo for remote writes
 	struct write_op *write_ops;
+	uint64_t local_w_id;
 	uint32_t *session_id;
   enum write_state *w_state;
   uint16_t *c_write_ptr; // backward pointers to the completed writes
@@ -550,18 +551,13 @@ struct completed_writes {
 
 };
 
-struct ack {
-	uint16_t ack_num;
-	uint8_t global_id[8];
-};
 
 // The format of an ack message
 struct ack_message {
   uint8_t follower_id;
   uint8_t opcode;
-  uint16_t coalesce_num;
-  struct ack ack[MAX_GIDS_IN_AN_ACK];
-
+	uint16_t ack_num;
+	uint8_t local_id[8]; // the first local id that is being acked
 };
 
 
