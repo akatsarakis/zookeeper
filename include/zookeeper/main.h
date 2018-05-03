@@ -277,7 +277,7 @@
 //---WRITES---
 #define MAX_W_COALESCE 1
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
-#define SINGLE_WRITE_PAYLOAD (HERD_VALUE_SIZE + WRITE_HEADER)
+#define SINGLE_WRITE_PAYLOAD (VALUE_SIZE + WRITE_HEADER)
 #define WRITE_MESSAGES_VALUE_SIZE (MAX_W_COALESCE * SINGLE_WRITE_PAYLOAD)
 #define FLR_W_SEND_SIZE (WRITE_MESSAGES_VALUE_SIZE)
 #define LDR_W_RECV_SIZE (GRH_SIZE + FLR_W_SEND_SIZE)
@@ -521,15 +521,17 @@ struct pending_writes {
 	// The first half of this array is session based and
 	// the second half is a fifo for remote writes
 	struct write_op *write_ops;
-	uint32_t unordered_writes_num;
-	uint32_t writes_num;
-  uint32_t *unordered_writes;
+	uint32_t *session_id;
   enum write_state *w_state;
   uint16_t *c_write_ptr; // backward pointers to the completed writes
 	uint16_t push_ptr;
 	uint16_t pull_ptr;
 	uint16_t size;
+	uint16_t unordered_ptr;
   uint8_t *acks_seen;
+	bool *is_local;
+	bool *session_has_pending_write;
+	bool all_sessions_stalled;
 };
 
 struct completed_writes {

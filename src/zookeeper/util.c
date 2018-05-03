@@ -975,23 +975,25 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 {
   int i;
   (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
+  memset(p_writes, 0, sizeof(struct pending_writes));
   (*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
   (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-  (*p_writes)->unordered_writes = (uint32_t*) malloc(size * sizeof(uint32_t));
+  (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
   (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
-  (*p_writes)->c_write_ptr= (uint16_t*) malloc(size * sizeof(uint16_t));
-
-  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
-  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
-  (*p_writes)->size = 0;
+  (*p_writes)->c_write_ptr = (uint16_t*) malloc(size * sizeof(uint16_t));
+  (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
+  (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
+//  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
+//  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
+//  (*p_writes)->size = 0;
 
   //  memset((*p_writes)->global_ids, 0, size * sizeof(uint64_t));
   memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
-  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
+//  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
   memset((*p_writes)->c_write_ptr, 0, size * sizeof(uint16_t));
   memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
-
-
+  for (i = 0; i < SESSIONS_PER_THREAD; i++)
+    (*p_writes)->session_has_pending_write[i] = false;
   for (i = 0; i < size; i++) {
     (*p_writes)->write_ops[i].opcode = ZK_OP;
     (*p_writes)->write_ops[i].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;

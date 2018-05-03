@@ -24,14 +24,14 @@ void *leader(void *arg)
 												0, -1, /* port_index, numa_node_id */
 												0, 0,	/* #conn qps, uc */
 												NULL, 0, -1,	/* prealloc conn buf, buf size, key */
-												LEADER_QP_NUM, LEADER_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
+												LEADER_QP_NUM, UD_REQ_SIZE + LEADER_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
 												MASTER_SHM_KEY + t_id, /* key */
 												recv_q_depths, send_q_depths); /* Depth of the dgram RECV Q*/
 
   int ack_buf_push_ptr = 0, ack_buf_pull_ptr = -1;
   int w_buf_push_ptr = 0, w_buf_pull_ptr = -1;
-  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf);
-  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE); // leave a slot for the credits
+  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE + LEADER_ACK_BUF_SIZE);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
 	---------------------------------------------------------------------------*/
@@ -125,8 +125,8 @@ void *leader(void *arg)
   set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES);
   assert(p_writes->write_ops[LEADER_PENDING_WRITES - 1].opcode == CACHE_OP_BRC);
 
-  struct completed_writes * c_writes;
-  set_up_completed_writes(&c_writes, LEADER_PENDING_WRITES);
+  //struct completed_writes * c_writes;
+  //set_up_completed_writes(&c_writes, LEADER_PENDING_WRITES);
 
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
@@ -154,7 +154,7 @@ void *leader(void *arg)
 	/* ---------------------------------------------------------------------------
 	------------------------------START LOOP--------------------------------
 	---------------------------------------------------------------------------*/
-	while(1) {
+	while(true) {
 //
 		if (unlikely(credit_debug_cnt > M_1)) {
 			red_printf("Leader %d misses credits \n", t_id);
@@ -168,7 +168,7 @@ void *leader(void *arg)
 		------------------------------ POLL FOR ACKS--------------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      poll_for_acks(ack_buffer, &ack_buf_pull_ptr, p_writes, c_writes,
+      poll_for_acks(ack_buffer, &ack_buf_pull_ptr, p_writes,
                     credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc);
 
 
@@ -187,7 +187,7 @@ void *leader(void *arg)
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
       if (com_bcast_num > 0)
-      broadcast_commits(c_writes, p_writes, credits, cb, com_fifo,
+      broadcast_commits(credits, cb, com_fifo,
                         &commit_br_tx, &credit_debug_cnt, credit_wc,
                         com_send_sgl, com_send_wr, credit_recv_wr);
 
@@ -201,8 +201,20 @@ void *leader(void *arg)
 		trace_iter = leader_batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
                                                   p_writes, resp,
                                                   &latency_info, &start);
+
+
+    /* ---------------------------------------------------------------------------
+		------------------------------POLL FOR REMOTE WRITES--------------------------
+		---------------------------------------------------------------------------*/
+    // get local and remote writes back to back to increase the write batch
+
+
+
+    /* ---------------------------------------------------------------------------
+		------------------------------GET GLOBAL WRITE IDS--------------------------
+		---------------------------------------------------------------------------*/
     // Assign a global write  id to each new write
-    get_wids(p_writes, c_writes, t_id);
+    get_wids(p_writes, t_id);
 
 
 

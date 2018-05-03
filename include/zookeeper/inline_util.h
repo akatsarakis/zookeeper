@@ -1444,56 +1444,60 @@ static inline void debug_stalling_LIN(uint16_t stalled_ops_i, uint32_t *stalled_
 /* ---------------------------------------------------------------------------
 //------------------------------ LEADER SPECIFIC -----------------------------
 //---------------------------------------------------------------------------*/
+
 static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t_id, struct trace_command *trace,
-                                                        struct cache_op *ops,
-                                                        struct pending_writes *p_writes, struct mica_resp *resp,
-                                                        struct latency_flags *latency_info, struct timespec *start)
+																												struct cache_op *ops,
+																												struct pending_writes *p_writes, struct mica_resp *resp,
+																												struct latency_flags *latency_info, struct timespec *start)
 {
 	int i = 0, op_i;
 	uint8_t is_update = 0;
 	int working_session = -1;
-  if (p_writes->writes_num == LEADER_PENDING_WRITES) return trace_iter;
+	if (p_writes->all_sessions_stalled) return trace_iter;
 	for (i = 0; i < SESSIONS_PER_THREAD; i++) {
-		if (p_writes->w_state[i] == INVALID ) {
+		if (p_writes->session_has_pending_write[i]) {
 			working_session = i;
 			break;
 		}
 	}
 	if (ENABLE_ASSERTIONS) assert(working_session != -1);
 
-  //  green_printf("op_i %d , trace_iter %d, trace[trace_iter].opcode %d \n", op_i, trace_iter, trace[trace_iter].opcode);
+	//  green_printf("op_i %d , trace_iter %d, trace[trace_iter].opcode %d \n", op_i, trace_iter, trace[trace_iter].opcode);
 	while (op_i < CACHE_BATCH_SIZE && working_session < SESSIONS_PER_THREAD) {
 		if (ENABLE_ASSERTIONS) assert(trace[trace_iter].opcode != NOP);
 		is_update = (IS_WRITE(trace[trace_iter].opcode)) ? (uint8_t) 1 : (uint8_t) 0;
 		*(uint128 *) &ops[op_i] = trace[trace_iter].key_hash;
-//		ops[op_i].key.meta.cid = working_session;
+    //ops[op_i].key.meta.cid = working_session;
 		ops[op_i].opcode = is_update ? (uint8_t) CACHE_OP_PUT : (uint8_t) CACHE_OP_GET;
 		ops[op_i].val_len = is_update ? (uint8_t) (HERD_VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0; // if it is not an update the val_len will not be included in the packet
-    if (is_update) {
-//      printf("Thread %d found a write for session %d\n", t_id, working_session);
-      p_writes->writes_num++;
-      p_writes->unordered_writes[p_writes->unordered_writes_num] = working_session;
-      p_writes->unordered_writes_num++;
-      struct write_op *tmp_op = (struct write_op*) &ops[op_i];
-      memcpy(&(p_writes->write_ops[working_session].key), &(tmp_op->key), sizeof(struct key));
-      if (ENABLE_ASSERTIONS) {
-        assert(p_writes->w_state[working_session] == INVALID);
-        assert(keys_are_equal((struct cache_key *)&p_writes->write_ops[working_session], &ops[op_i].key) == 1);
-      }
-      p_writes->w_state[working_session] = VALID;
-      while (p_writes->w_state[working_session] != INVALID) {
-        working_session++;
-        if (working_session == SESSIONS_PER_THREAD) break;
-      }
-//      printf("thread %d t_id next working session %d\n total ops %d\n", t_id, working_session, op_i);
-    }
+		if (is_update) {
+      // printf("Thread %d found a write for session %d\n", t_id, working_session);
+			uint16_t w_ptr = p_writes->push_ptr;
+			struct write_op *tmp_op = (struct write_op*) &ops[op_i];
+			memcpy(&(p_writes->write_ops[w_ptr].key), &(tmp_op->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
+			if (ENABLE_ASSERTIONS) {
+				assert(p_writes->w_state[w_ptr] == INVALID);
+				assert(keys_are_equal((struct cache_key *)&p_writes->write_ops[w_ptr], &ops[op_i].key) == 1);
+			}
+			p_writes->w_state[w_ptr] = VALID;
+			p_writes->session_has_pending_write[working_session] = true;
+			p_writes->is_local[w_ptr] = true;
+			p_writes->session_id[w_ptr] = working_session;
+			MOD_ADD(p_writes->push_ptr, LEADER_PENDING_WRITES);
+			p_writes->size++;
+			while (p_writes->session_has_pending_write[working_session]) {
+				working_session++;
+				if (working_session == SESSIONS_PER_THREAD) break;
+			}
+    // printf("thread %d t_id next working session %d\n total ops %d\n", t_id, working_session, op_i);
+		}
 
-    if (ENABLE_ASSERTIONS == 1) {
+		if (ENABLE_ASSERTIONS == 1) {
 			assert(WRITE_RATIO > 0 || is_update == 0);
 			if (is_update) assert(ops[op_i].val_len > 0);
 		}
 		resp[op_i].type = EMPTY;
- 		//		if(ops[op_i].opcode == CACHE_OP_PUT) //put the folowing value
+		//		if(ops[op_i].opcode == CACHE_OP_PUT) //put the folowing value
 		//			str_to_binary(ops[op_i].value, "Armonia is the key to success!  ", HERD_VALUE_SIZE);
 		trace_iter++;
 		if (trace[trace_iter].opcode == NOP) trace_iter = 0;
@@ -1504,49 +1508,25 @@ static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uin
 	return trace_iter;
 }
 
-// Handout global ids to  pending writes
-static inline void get_wids_depricated(struct pending_writes *p_writes, struct completed_writes *c_writes, uint16_t t_id)
-{
-  uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)p_writes->unordered_writes_num, memory_order_relaxed);
-  int i;
-  struct write_op *w_ops = p_writes->write_ops;
-  for (i = 0; i < p_writes->unordered_writes_num; ++i) {
-    uint32_t write_op_ptr = p_writes->unordered_writes[i];
-    if (ENABLE_ASSERTIONS) assert(w_ops[write_op_ptr].g_id == 0);
-    w_ops[write_op_ptr].g_id = id + i;
-    c_writes->p_writes_ptr[c_writes->push_ptr] = write_op_ptr;
-    c_writes->w_ops[c_writes->push_ptr] = &w_ops[write_op_ptr];
-    c_writes->w_state[c_writes->push_ptr] = VALID;
-    p_writes->c_write_ptr[write_op_ptr] = c_writes->push_ptr;
-    c_writes->push_ptr++;
-
-//    printf("Thread %d got id %lu for its write for session %d \n", t_id,  w_ops[write_op_ptr].g_id, write_op_ptr);
-  }
-  p_writes->unordered_writes_num = 0;
-//  sleep(10);
-//  exit(0);
-}
 
 
 // Handout global ids to  pending writes
-static inline void get_wids(struct pending_writes *p_writes, struct completed_writes *c_writes, uint16_t t_id)
+static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 {
-	uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)p_writes->unordered_writes_num, memory_order_relaxed);
+	uint16_t unordered_writes_num = (LEADER_PENDING_WRITES + p_writes->push_ptr - p_writes->unordered_ptr)
+																	% LEADER_PENDING_WRITES;
+	uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)unordered_writes_num, memory_order_relaxed);
 	int i;
 	struct write_op *w_ops = p_writes->write_ops;
-	for (i = 0; i < p_writes->unordered_writes_num; ++i) {
-		uint32_t write_op_ptr = p_writes->unordered_writes[i];
-		if (ENABLE_ASSERTIONS) assert(w_ops[write_op_ptr].g_id == 0);
-		w_ops[write_op_ptr].g_id = id + i;
-		c_writes->p_writes_ptr[c_writes->push_ptr] = write_op_ptr;
-		c_writes->w_ops[c_writes->push_ptr] = &w_ops[write_op_ptr];
-		c_writes->w_state[c_writes->push_ptr] = VALID;
-		p_writes->c_write_ptr[write_op_ptr] = c_writes->push_ptr;
-		c_writes->push_ptr++;
-
+	for (i = 0; i < unordered_writes_num; ++i) {
+		if (ENABLE_ASSERTIONS) assert(w_ops[i].g_id == 0);
+		w_ops[i].g_id = id + i;
 //    printf("Thread %d got id %lu for its write for session %d \n", t_id,  w_ops[write_op_ptr].g_id, write_op_ptr);
 	}
-	p_writes->unordered_writes_num = 0;
+	if (ENABLE_ASSERTIONS)
+		assert((p_writes->unordered_ptr + unordered_writes_num) % LEADER_PENDING_WRITES == p_writes->push_ptr);
+	p_writes->unordered_ptr = p_writes->push_ptr;
+
 //  sleep(10);
 //  exit(0);
 }
@@ -1555,105 +1535,10 @@ static inline void get_wids(struct pending_writes *p_writes, struct completed_wr
 //------------------------------ MAIN LOOP -----------------------------
 //---------------------------------------------------------------------------*/
 
-// Poll for acks in the leader
-static inline void poll_for_acks_depricated(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
-                                 struct pending_writes *p_writes, struct completed_writes *c_writes,
-                                 uint16_t credits[][FOLLOWER_MACHINE_NUM],
-                                 struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
-{
-  uint32_t index = (*pull_ptr + 1) % LEADER_ACK_BUF_SLOTS;
-  uint32_t polled_messages = 0;
-  while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
-    // printf("Leader  Opcode %d at offset %d at address %u \n",  incoming_acks[index].ack.opcode,
-    // 			index, &(incoming_reqs[index]));
-    struct ack_message *ack = &incoming_acks[index].ack;
-    uint16_t ack_num = incoming_acks[index].ack.ack_num;
-    if (ENABLE_ASSERTIONS) {
-      assert(ack_num < MAX_ACK_COALESCE);
-      assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
-    }
-    // assume that a cache line will be written atomically
-    if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE) {
-      while ((*(uint64_t *)(ack->global_id + (ack_num - 1) * sizeof(uint64_t))) == 0); // spin until the entire message is there
-    }
-    uint16_t  ack_i, w_i;
-    for (ack_i = 0; ack_i < ack_num; ack_i++) {
-      uint64_t g_id = *(uint64_t *)(ack->global_id + ack_i * sizeof(uint64_t));
-      for (w_i = 0; w_i < LEADER_PENDING_WRITES; w_i++) {
-        if ( p_writes->w_state[w_i] != INVALID) {
-          if (g_id == p_writes->write_ops[w_i].g_id) {
-            if (ENABLE_ASSERTIONS) assert(p_writes->acks_seen[w_i] < FOLLOWER_MACHINE_NUM);
-            p_writes->acks_seen[w_i]++;
-            if (p_writes->acks_seen[w_i] == LDR_QUORUM_OF_ACKS) { //pointers to complete writes
-              c_writes->w_state[p_writes->c_write_ptr[w_i]] = READY;
-            }
-          }
-        }
-      }
-    }
-    credits[PREP_VC][ack->follower_id] += ack_num; // increase credits
-    if (ENABLE_ASSERTIONS) assert(credits[PREP_VC][ack->follower_id] <= PREPARE_CREDITS);
-    if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE)
-      memset(ack, 0, (ack_num + 1) * sizeof(uint64_t)); // need to delete all the g_ids
-    else ack->opcode = 0; // if the ack is less than a cache line, then we are guaranteed the nIC will write it atomically
-    MOD_ADD_WITH_BASE(index, LEADER_ACK_BUF_SLOTS, 0);
-    polled_messages++;
-  } // while
-  *pull_ptr = index - 1;
-  if (ENABLE_ASSERTIONS) if (index == 0) assert(*pull_ptr == -1);
-
-  // Poll for the completion of the receives
-  hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
-}
-
-// Add the acked gid to the appropriate commit message
-static inline void forge_commit_messsage_depricated(struct commit_fifo *com_fifo, struct completed_writes *c_writes)
-{
-	uint16_t com_mes_i = com_fifo->total_push_ptr;
-	struct com_message *commits = com_fifo->commits;
-	uint16_t g_id_i = commits[com_mes_i].com_num;
-	uint16_t w_ops_ptr = c_writes->pull_ptr;
-	commits[com_mes_i].g_id[g_id_i] = c_writes->w_ops[w_ops_ptr]->g_id;
-	commits[com_mes_i].com_num++;
-	com_fifo->size++;
-	if (commits[com_mes_i].com_num == MAX_COM_COALESCE)
-		MOD_ADD(com_fifo->total_push_ptr, COMMIT_FIFO_SIZE);
-	if (ENABLE_ASSERTIONS) {
-		assert(commits[com_mes_i].com_num <= MAX_COM_COALESCE);
-		assert(com_fifo->size <= MAX_COM_COALESCE * COMMIT_FIFO_SIZE);
-	}
-}
-
-// Propagate Updates that have seen all acks to the KVS
-static inline void propagate_updates_depricated(struct completed_writes *c_writes, struct pending_writes *p_writes,
-																		 struct commit_fifo *com_fifo, struct mica_resp *resp)
-{
-	uint16_t update_op_i = 0;
-	uint32_t pull_ptr = c_writes->pull_ptr;
-	//struct com_message *commits = com_fifo->commits;
-	uint64_t committed_g_id = atomic_load_explicit(&committed_global_w_id, memory_order_relaxed);
-	while(c_writes->w_state[c_writes->pull_ptr] == READY) {
-		if (com_fifo->size == MAX_COM_COALESCE * COMMIT_FIFO_SIZE) break; // the commit fifo is full
-		if (c_writes->w_ops[c_writes->pull_ptr]->g_id != committed_g_id + 1) break;
-
-		c_writes->w_state[c_writes->pull_ptr] = INVALID;
-		p_writes->w_state[c_writes->p_writes_ptr[c_writes->pull_ptr]] = INVALID;
-		// Add the acked gid to the appropriate commit message
-		forge_commit_messsage_depricated(com_fifo, c_writes);
-		MOD_ADD(c_writes->pull_ptr, LEADER_PENDING_WRITES);
-		update_op_i++;
-		committed_g_id++;
-	}
-	if (update_op_i > 0) {
-		cache_batch_op_updates((uint32_t) update_op_i, 0, (struct cache_op **) &(c_writes->w_ops[pull_ptr]), resp);
-		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
-	}
-}
-
 
 // Leader polls for acks
 static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
-																						struct pending_writes *p_writes, struct completed_writes *c_writes,
+																						struct pending_writes *p_writes,
 																						uint16_t credits[][FOLLOWER_MACHINE_NUM],
 																						struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
 {
@@ -1708,8 +1593,6 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
 }
 
 
-
-
 // Add the acked gid to the appropriate commit message
 static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g_id)
 {
@@ -1740,9 +1623,14 @@ static inline void propagate_updates(struct pending_writes *p_writes,
 		if (com_fifo->size == MAX_COM_COALESCE * COMMIT_FIFO_SIZE) break; // the commit fifo is full
 		if (p_writes->write_ops[p_writes->pull_ptr].g_id != committed_g_id + 1) break;
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
-
+		if (p_writes->is_local[p_writes->pull_ptr]) {
+			p_writes->session_has_pending_write[p_writes->pull_ptr] = false;
+			p_writes->all_sessions_stalled = false;
+			p_writes->is_local[p_writes->pull_ptr] = false;
+		}
 		// Add the acked gid to the appropriate commit message
 		forge_commit_message(com_fifo, p_writes->write_ops[p_writes->pull_ptr].g_id);
+		p_writes->write_ops[p_writes->pull_ptr].g_id = 0;
 		MOD_ADD(p_writes->pull_ptr, LEADER_PENDING_WRITES);
 		update_op_i++;
 		committed_g_id++;
@@ -1771,6 +1659,8 @@ static inline void poll_for_writes(struct w_message_ud_req *incoming_ws, int *pu
 
 
 	}
+	// Poll for the completion of the receives
+	hrd_poll_cq(w_recv_cq, polled_messages, w_recv_wc);
 }
 
 
@@ -1884,8 +1774,7 @@ static inline void post_recvs_and_batch_bcasts_to_NIC(uint16_t br_i, struct hrd_
 }
 
 // Leader broadcasts commits
-static inline void broadcast_commits(struct completed_writes *c_writes, struct pending_writes *p_writes,
-                                     uint16_t credits[][FOLLOWER_MACHINE_NUM], struct hrd_ctrl_blk *cb,
+static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct hrd_ctrl_blk *cb,
                                      struct commit_fifo *com_fifo, long long *commit_br_tx,
 																		 uint32_t *credit_debug_cnt, struct ibv_wc *credit_wc,
                                      struct ibv_sge *com_send_sgl, struct ibv_send_wr *com_send_wr,
