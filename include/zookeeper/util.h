@@ -150,6 +150,11 @@ void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER--------------------------------------
 ---------------------------------------------------------------------------*/
+// Set up the receive info
+void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_slots,
+                    uint32_t slot_size, struct ibv_recv_wr *recv_wr,
+                    struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf);
+
 // Set up a struct that stores pending writes
 void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size);
 // Set up a struct that points to completed writes

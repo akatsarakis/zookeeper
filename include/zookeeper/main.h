@@ -262,14 +262,17 @@
 
 // -------ACKS-------------
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
-#define MAX_ACK_COALESCE 7
-#define FLR_ACK_SEND_SIZE ((MAX_ACK_COALESCE + 1) * 8)
+#define MAX_ACK_COALESCE 20000
+#define FLR_ACK_SEND_SIZE (12) // a write global id and its metadata
 #define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
 
 
 // -- COMMITS-----
-#define MAX_COM_COALESCE 7
-#define LDR_COM_SEND_SIZE ((MAX_COM_COALESCE + 1) * 8)
+#define MAX_GIDS_IN_A_COMMIT K_64_
+#define COM_SIZE 10 // gid(8) + com_num(2)
+#define COM_MES_HEADER_SIZE 3 // opcode + coalesce num
+#define MAX_COM_COALESCE 6
+#define LDR_COM_SEND_SIZE (MAX_COM_COALESCE * COM_SIZE + COM_MES_HEADER_SIZE)
 #define FLR_COM_RECV_SIZE (GRH_SIZE + LDR_COM_SEND_SIZE)
 #define COM_ENABLE_INLINING ((LDR_COM_SEND_SIZE < MAXIMUM_INLINE_SIZE) ? 1: 0)
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
@@ -529,6 +532,7 @@ struct pending_writes {
 	uint16_t size;
 	uint16_t unordered_ptr;
   uint8_t *acks_seen;
+	uint8_t *flr_id;
 	bool *is_local;
 	bool *session_has_pending_write;
 	bool all_sessions_stalled;
@@ -548,7 +552,7 @@ struct ack_message {
   uint8_t follower_id;
   uint8_t opcode;
   uint16_t ack_num;
-  uint8_t global_id[MAX_ACK_COALESCE * 8];
+  uint8_t global_id[8];
 //  uint8_t unused[4];
 };
 
@@ -558,29 +562,44 @@ struct ack_message_ud_req {
 
  };
 
-// The format of an ack repsonse
+struct commit {
+	uint16_t com_num;
+	uint8_t g_id[8];
+};
+
+// The format of a commit message
 struct com_message {
-  uint8_t follower_id;
   uint8_t opcode;
-  uint16_t com_num;
-  uint32_t session_id;
-  uint64_t g_id[MAX_COM_COALESCE];
+  uint16_t coalesce_num;
+	struct commit commit[MAX_COM_COALESCE];
 };
 
 struct com_message_ud_req {
   struct ibv_grh grh;
-  struct ack_message com;
+  struct com_message com;
 
 };
 
+// The entires in the commit fifo are distinct batches of commits
 struct commit_fifo {
   struct com_message *commits;
-  uint16_t total_push_ptr;
+  uint16_t push_ptr;
   uint16_t pull_ptr;
-  uint16_t size;
+  uint32_t size; // number of commits rather than  messages
 };
 
-struct write {
+struct recv_info {
+	uint32_t *push_ptr;
+	uint32_t buf_slots;
+	uint32_t slot_size;
+	struct ibv_recv_wr *recv_wr;
+	struct ibv_qp * recv_qp;
+	struct ibv_sge* recv_sgl;
+	void* buf;
+
+};
+
+struct w_message {
   uint8_t flr_id[4];
   uint8_t session_id[4];
   uint8_t key[TRUE_KEY_SIZE];	/* 8B */
@@ -589,14 +608,14 @@ struct write {
   uint8_t value[VALUE_SIZE];
 };
 
-struct w_message {
-  struct write w[MAX_W_COALESCE];
-};
+//struct w_message {
+//  struct write w[MAX_W_COALESCE];
+//};
 
 struct w_message_ud_req {
 //  struct ibv_grh grh; // compiler puts padding with this
 	uint8_t unused[GRH_SIZE];
-  struct write writes[MAX_W_COALESCE];
+  struct w_message writes[MAX_W_COALESCE];
 };
 
 struct thread_stats { // 2 cache lines

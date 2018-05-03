@@ -970,6 +970,22 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 ------------------------------LEADER --------------------------------------
 ---------------------------------------------------------------------------*/
 
+// Set up the receive info
+void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_slots,
+                    uint32_t slot_size, struct ibv_recv_wr *recv_wr,
+                    struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf)
+{
+    (*recv) = malloc(sizeof(struct recv_info));
+    (*recv)->push_ptr = push_ptr;
+    (*recv)->buf_slots = buf_slots;
+    (*recv)->slot_size = slot_size;
+    (*recv)->recv_wr = recv_wr;
+    (*recv)->recv_qp = recv_qp;
+    (*recv)->recv_sgl = recv_sgl;
+    (*recv)->buf = buf;
+}
+
+
 // Set up a struct that stores pending writes
 void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 {
@@ -980,6 +996,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
   (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
   (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
   (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+  (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
   (*p_writes)->c_write_ptr = (uint16_t*) malloc(size * sizeof(uint16_t));
   (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
   (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
@@ -1089,7 +1106,7 @@ void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
   *resp = memalign(4096, CACHE_BATCH_SIZE * mica_resp_size);
   *commit_resp = memalign(4096, LEADER_PENDING_WRITES * mica_resp_size);
   memset((*com_fifo)->commits, 0, COMMIT_FIFO_SIZE * sizeof(struct com_message));
-  (*com_fifo)->total_push_ptr = 0;
+  (*com_fifo)->push_ptr = 0;
   (*com_fifo)->pull_ptr = 0; (*com_fifo)->size = 0;
   for(i = 0; i <  CACHE_BATCH_SIZE; i++) (*resp)[i].type = EMPTY;
   for(i = 0; i <  LEADER_PENDING_WRITES; i++) (*commit_resp)[i].type = EMPTY;
