@@ -969,16 +969,25 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER --------------------------------------
 ---------------------------------------------------------------------------*/
+// construct a prep_message-- max_size must be in bytes
+void init_fifo(struct fifo **fifo, uint32_t max_size)
+{
+    (*fifo) = (struct fifo *)malloc(sizeof(struct fifo));
+    memset(fifo, 0, sizeof(struct fifo));
+    (*fifo)->fifo = malloc(max_size);
+}
+
 
 // Set up the receive info
 void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_slots,
-                    uint32_t slot_size, struct ibv_recv_wr *recv_wr,
+                    uint32_t slot_size, uint32_t posted_recvs, struct ibv_recv_wr *recv_wr,
                     struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf)
 {
     (*recv) = malloc(sizeof(struct recv_info));
     (*recv)->push_ptr = push_ptr;
     (*recv)->buf_slots = buf_slots;
     (*recv)->slot_size = slot_size;
+    (*recv)->posted_recvs = posted_recvs;
     (*recv)->recv_wr = recv_wr;
     (*recv)->recv_qp = recv_qp;
     (*recv)->recv_sgl = recv_sgl;
@@ -989,33 +998,45 @@ void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_sl
 // Set up a struct that stores pending writes
 void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 {
-  int i;
-  (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
-  memset(p_writes, 0, sizeof(struct pending_writes));
-  (*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
-  (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-  (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
-  (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
-  (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
-  (*p_writes)->c_write_ptr = (uint16_t*) malloc(size * sizeof(uint16_t));
-  (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
-  (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
-//  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
-//  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
-//  (*p_writes)->size = 0;
+    int i;
+    (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
+    memset(p_writes, 0, sizeof(struct pending_writes));
+    //(*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
+    (*p_writes)->g_id = (uint64_t*) malloc(size * sizeof(uint64_t));
+    (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
+    (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
+    (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+    (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
+    (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
+    (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
+    (*p_writes)->ptrs_to_ops = (struct cache_op**) malloc(size * sizeof(struct cache_op*));
+    //  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
+    //  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
+    //  (*p_writes)->size = 0;
 
-  //  memset((*p_writes)->global_ids, 0, size * sizeof(uint64_t));
-  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
-//  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
-  memset((*p_writes)->c_write_ptr, 0, size * sizeof(uint16_t));
-  memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
-  for (i = 0; i < SESSIONS_PER_THREAD; i++)
+    memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
+    (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
+    memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
+    (*p_writes)->prep_fifo->prep_message =
+      (struct prep_message*) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
+    //init_fifo(&(*p_writes)->prep_fifo, PREP_FIFO_SIZE * sizeof(struct prep_message));
+    assert((*p_writes)->prep_fifo != NULL);
+    //  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
+    //  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
+    memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
+    for (i = 0; i < SESSIONS_PER_THREAD; i++)
     (*p_writes)->session_has_pending_write[i] = false;
-  for (i = 0; i < size; i++) {
-    (*p_writes)->write_ops[i].opcode = ZK_OP;
-    (*p_writes)->write_ops[i].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+    for (i = 0; i < size; i++) {
     (*p_writes)->w_state[i] = INVALID;
-  }
+    }
+    struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
+    for (i = 0; i < PREP_FIFO_SIZE; i++) {
+        preps[i].opcode = ZK_OP;
+        for(uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
+            preps[i].prepare[j].opcode = ZK_OP;
+            preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+        }
+    }
 }
 
 

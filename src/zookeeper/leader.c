@@ -84,15 +84,15 @@ void *leader(void *arg)
 			ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
 			acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
 	uint32_t cmd_count = 0, credit_debug_cnt = 0;
-	uint32_t trace_iter = 0, posted_w_recvs = LDR_MAX_RECV_W_WRS;
-  long long credit_tx = 0, br_tx = 0, commit_br_tx = 0;
+	uint32_t trace_iter = 0;
+  long long credit_tx = 0, prep_br_tx = 0, commit_br_tx = 0;
 
   struct recv_info *w_recv_info, *ack_recv_info;
   init_recv_info(&w_recv_info, &w_buf_push_ptr, LEADER_W_BUF_SLOTS,
-                 LDR_W_RECV_SIZE, w_recv_wr, cb->dgram_qp[COMMIT_W_QP_ID], w_recv_sgl, (void*) w_buffer);
+                 LDR_W_RECV_SIZE, LDR_MAX_RECV_W_WRS, w_recv_wr, cb->dgram_qp[COMMIT_W_QP_ID], w_recv_sgl, (void*) w_buffer);
 
   init_recv_info(&ack_recv_info, &ack_buf_push_ptr, LEADER_ACK_BUF_SLOTS,
-                 LDR_ACK_RECV_SIZE, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl, (void*) ack_buffer);
+                 LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl, (void*) ack_buffer);
 
 
 
@@ -133,10 +133,8 @@ void *leader(void *arg)
 
   struct pending_writes *p_writes;
   set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES);
-  assert(p_writes->write_ops[LEADER_PENDING_WRITES - 1].opcode == CACHE_OP_BRC);
 
-  //struct completed_writes * c_writes;
-  //set_up_completed_writes(&c_writes, LEADER_PENDING_WRITES);
+
 
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
@@ -186,7 +184,7 @@ void *leader(void *arg)
 		------------------------------ PROPAGATE UPDATES--------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      /* After propagating the acked messages we push their l_id to a fifo buffer
+      /* After propagating the acked messages we push their l_id to a prep_message buffer
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
@@ -199,7 +197,7 @@ void *leader(void *arg)
       if (com_bcast_num > 0)
       broadcast_commits(credits, cb, com_fifo,
                         &commit_br_tx, &credit_debug_cnt, credit_wc,
-                        com_send_sgl, com_send_wr, credit_recv_wr, &posted_w_recvs,
+                        com_send_sgl, com_send_wr, credit_recv_wr,
                         w_recv_info);
 
 
@@ -234,11 +232,8 @@ void *leader(void *arg)
 		if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
-			perform_broadcasts(&ack_size, p_writes, ack_bcast_ops, &ack_pop_ptr, credits,
-                         cb, credit_wc, &credit_debug_cnt, prep_send_sgl, prep_send_wr, coh_message_count,
-                         coh_buf, &coh_buf_i, &br_tx, &commit_br_tx, credit_recv_wr, t_id, protocol, ack_recv_sgl,
-                         &ack_buf_push_ptr, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], LEADER_BUF_SLOTS, (void*)ack_buffer);
-//    printf("Thread %d, broadcasts are done %llu \n", t_id, br_tx);
+      broadcast_prepares(p_writes, credits, cb, credit_wc, &credit_debug_cnt,
+                         prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info);
 
 //		/* ---------------------------------------------------------------------------
 //		------------------------------SEND CREDITS--------------------------------

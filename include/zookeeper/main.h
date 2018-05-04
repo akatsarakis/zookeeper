@@ -258,6 +258,7 @@
 
 // if this is smaller than MAX_BCAST_BATCH + 2 it will deadlock because the signaling messaged is polled before actually posted
 #define COM_BCAST_SS_BATCH MAX((MIN_SS_BATCH / (FOLLOWER_MACHINE_NUM)), (MAX_BCAST_BATCH + 2))
+#define PREP_BCAST_SS_BATCH MAX((MIN_SS_BATCH / (FOLLOWER_MACHINE_NUM)), (MAX_BCAST_BATCH + 2))
 
 
 // -------ACKS-------------
@@ -289,7 +290,13 @@
 #define LDR_W_RECV_SIZE (GRH_SIZE + FLR_W_SEND_SIZE)
 
 //--PREPARES
-#define FLR_PREP_RECV_SIZE (UD_REQ_SIZE)
+#define MAX_PREP_COALESCE 2
+#define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
+#define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
+#define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
+#define FLR_PREP_RECV_SIZE (GRH_SIZE + LDR_PREP_SEND_SIZE)
+#define PREP_FIFO_SIZE (LEADER_PENDING_WRITES)
+#define LEADER_PREPARE_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (LDR_PREP_SEND_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
 
 
 //---------LEADER-----------------------
@@ -522,25 +529,6 @@ struct remote_qp {
 enum write_state {INVALID, VALID, SENT, READY, SEND_COMMITTS};
 
 
-// A data structute that keeps track of the outstanding writes
-struct pending_writes {
-	// The first half of this array is session based and
-	// the second half is a fifo for remote writes
-	struct write_op *write_ops;
-	uint64_t local_w_id;
-	uint32_t *session_id;
-  enum write_state *w_state;
-  uint16_t *c_write_ptr; // backward pointers to the completed writes
-	uint16_t push_ptr;
-	uint16_t pull_ptr;
-	uint16_t size;
-	uint16_t unordered_ptr;
-  uint8_t *acks_seen;
-	uint8_t *flr_id;
-	bool *is_local;
-	bool *session_has_pending_write;
-	bool all_sessions_stalled;
-};
 
 struct completed_writes {
   struct write_op **w_ops; // FIFO QUEUE that points to the next write to commit
@@ -562,15 +550,11 @@ struct ack_message {
 
 
 struct ack_message_ud_req {
-	uint8_t unused[GRH_SIZE];
+	uint8_t grh[GRH_SIZE];
   struct ack_message ack;
 
  };
 
-//struct commit {
-//	uint16_t com_num;
-//	uint8_t l_id[8];
-//};
 
 // The format of a commit message
 struct com_message {
@@ -579,13 +563,36 @@ struct com_message {
 	uint8_t l_id[8];
 };
 
+// commit message plus the grh
 struct com_message_ud_req {
-	uint8_t unused[GRH_SIZE];
+	uint8_t grh[GRH_SIZE];
   struct com_message com;
 
 };
 
-// The entires in the commit fifo are distinct batches of commits
+struct prepare {
+	uint8_t flr_id;
+	uint8_t session_id[3];
+	uint8_t g_id[4]; //send the bottom half of the gid
+	uint8_t key[8];
+	uint8_t opcode; //override opcode
+	uint8_t val_len;
+	uint8_t value[VALUE_SIZE];
+};
+
+// prepare message
+struct prep_message {
+	uint8_t opcode;
+	uint8_t coalesce_num;
+	uint8_t l_id[4]; // send the bottom half of the lid
+	struct prepare prepare[MAX_PREP_COALESCE];
+};
+
+struct prep_message_ud_req {
+	uint8_t grh[GRH_SIZE];
+	struct prep_message prepare;
+};
+// The entires in the commit prep_message are distinct batches of commits
 struct commit_fifo {
   struct com_message *commits;
   uint16_t push_ptr;
@@ -593,10 +600,51 @@ struct commit_fifo {
   uint32_t size; // number of commits rather than  messages
 };
 
+struct fifo {
+	void *fifo;
+	uint32_t push_ptr;
+	uint32_t pull_ptr;
+	uint32_t size;
+
+};
+
+struct prep_fifo {
+	struct prep_message *prep_message;
+	uint32_t push_ptr;
+	uint32_t pull_ptr;
+	uint32_t bcast_pull_ptr;
+	uint32_t bcast_size;
+	uint32_t size;
+	uint32_t backward_ptrs[PREP_FIFO_SIZE];
+
+};
+
+
+// A data structute that keeps track of the outstanding writes
+struct pending_writes {
+	uint64_t *g_id;
+	struct prep_fifo *prep_fifo;
+	struct cache_op **ptrs_to_ops;
+	uint64_t local_w_id;
+	uint32_t *session_id;
+	enum write_state *w_state;
+	uint32_t push_ptr;
+	uint32_t pull_ptr;
+	uint32_t prep_pull_ptr; // Where to pull prepares from
+	uint32_t size;
+	uint32_t unordered_ptr;
+	uint8_t *acks_seen;
+	uint8_t *flr_id;
+	bool *is_local;
+	bool *session_has_pending_write;
+	bool all_sessions_stalled;
+};
+
 struct recv_info {
 	uint32_t *push_ptr;
 	uint32_t buf_slots;
 	uint32_t slot_size;
+	uint32_t posted_recvs;
 	struct ibv_recv_wr *recv_wr;
 	struct ibv_qp * recv_qp;
 	struct ibv_sge* recv_sgl;

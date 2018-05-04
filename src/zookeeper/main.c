@@ -59,6 +59,10 @@ int main(int argc, char *argv[])
   cyan_printf("ACK: ack message %lu/%d, ack message ud req %llu/%d\n",
                sizeof(struct ack_message), FLR_ACK_SEND_SIZE,
                sizeof(struct ack_message_ud_req), LDR_ACK_RECV_SIZE);
+  yellow_printf("PREPARE: prepare %lu/%d, prep message %lu/%d, prep message ud req %llu/%d\n",
+                sizeof(struct prepare), PREP_SIZE,
+                sizeof(struct prep_message), LDR_PREP_SEND_SIZE,
+                sizeof(struct prep_message_ud_req), FLR_PREP_RECV_SIZE);
 
 
 	assert(LEADER_MACHINE < MACHINE_NUM);
@@ -70,6 +74,9 @@ int main(int argc, char *argv[])
   assert((COMMIT_CREDITS % FLR_CREDIT_DIVIDER) == 0); // division better be perfect
   assert(sizeof(struct ack_message_ud_req) == LDR_ACK_RECV_SIZE);
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
+  assert(sizeof(struct prep_message_ud_req) == FLR_PREP_RECV_SIZE);
+  assert(SESSIONS_PER_THREAD < M_16);
+
 
 
   yellow_printf("WRITE: size of write recv slot %d size of w_message %lu , "
@@ -78,8 +85,6 @@ int main(int argc, char *argv[])
          sizeof(struct cache_op), sizeof(struct w_message_ud_req));
   assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(sizeof(struct w_message) == FLR_W_SEND_SIZE);
-
-
 
 
 
@@ -92,9 +97,13 @@ int main(int argc, char *argv[])
   //memcpy(&random_id3, aek, sizeof(uint64_t));
   random_id3 = *(uint64_t *)(aek);
   memcpy(&random_id4, aek + 8,  sizeof(uint64_t));
+  uint8_t random_id5[4];
+  memcpy(random_id5, &random_id, 4);
+  uint32_t random_id6 = *(uint32_t *)random_id5;
 
-  printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu \n",
-         random_id3, random_id4);
+
+  printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu random id 5(123456789) %u \n",
+         random_id3, random_id4, random_id6);
 
 
 	int i, c;
