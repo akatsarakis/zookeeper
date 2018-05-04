@@ -1521,7 +1521,7 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 	for (i = 0; i < unordered_writes_num; ++i) {
 		if (ENABLE_ASSERTIONS) assert(w_ops[i].g_id == 0);
 		w_ops[i].g_id = id + i;
-//    printf("Thread %d got id %lu for its write for session %d \n", t_id,  w_ops[write_op_ptr].g_id, write_op_ptr);
+//    printf("Thread %d got id %lu for its write for session %d \n", t_id,  w_ops[write_op_ptr].l_id, write_op_ptr);
 	}
 	if (ENABLE_ASSERTIONS)
 		assert((p_writes->unordered_ptr + unordered_writes_num) % LEADER_PENDING_WRITES == p_writes->push_ptr);
@@ -1537,12 +1537,12 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 
 
 // Leader polls for acks
-static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *pull_ptr,
+static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint32_t *pull_ptr,
 																						struct pending_writes *p_writes,
 																						uint16_t credits[][FOLLOWER_MACHINE_NUM],
 																						struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
 {
-	uint32_t index = (*pull_ptr + 1) % LEADER_ACK_BUF_SLOTS;
+	uint32_t index = *pull_ptr;
 	uint32_t polled_messages = 0;
 	while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
 		// printf("Leader  Opcode %d at offset %d at address %u \n",  incoming_acks[index].ack.opcode,
@@ -1553,8 +1553,9 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
 		polled_messages++;
 		credits[PREP_VC][ack->follower_id] += ack_num; // increase credits
 		// if the pending write FIFO is empty it means the acks are for committed messages.
-		if (p_writes->size == 0) { memset(ack, 0, (2) * sizeof(uint64_t)); continue; }
+		if (p_writes->size == 0) { memset(ack, 0, FLR_ACK_SEND_SIZE); continue; }
 		if (ENABLE_ASSERTIONS) {
+				assert(ack_num > 0);
 				assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
 		}
 		// spin until the entire message is there
@@ -1577,38 +1578,32 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, int *
 			MOD_ADD(ack_ptr, LEADER_PENDING_WRITES);
 		}
 		if (ENABLE_ASSERTIONS) assert(credits[PREP_VC][ack->follower_id] <= PREPARE_CREDITS);
-		//if (LDR_ACK_RECV_SIZE > CACHE_LINE_SIZE)
 		memset(ack, 0, FLR_ACK_SEND_SIZE); // need to delete all the g_ids
-		//else ack->opcode = 0; // if the ack is less than a cache line, then we are guaranteed the nIC will write it atomically
 	} // while
 
-	*pull_ptr = index - 1;
-	if (ENABLE_ASSERTIONS) if (index == 0) assert(*pull_ptr == -1);
+	*pull_ptr = index;
 	// Poll for the completion of the receives
 	hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
 }
 
 
 // Add the acked gid to the appropriate commit message
-static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g_id, uint16_t update_op_i)
+static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t l_id, uint16_t update_op_i)
 {
+	//l_id refers the oldest write to commit (werites go from l_id to l_id + update_op_i)
 	uint16_t com_mes_i = com_fifo->push_ptr;
-	uint16_t last_com_mes_i, inner_commit_i;
+	uint16_t last_com_mes_i;
 	struct com_message *commit_messages = com_fifo->commits;
+	if (unlikely(update_op_i ))
 
-
-	// see if the new batch can fit with the previous one
+	// see if the new batch can fit with the previous one -- no reason why it should not
 	if (com_fifo->size > 0) {
-		if (commit_messages[com_mes_i].coalesce_num == 0)
-			last_com_mes_i = (COMMIT_FIFO_SIZE + com_mes_i - 1) % COMMIT_FIFO_SIZE;
-		else last_com_mes_i = com_mes_i;
-		inner_commit_i = commit_messages[last_com_mes_i].coalesce_num - 1; // coalesce_num is bigger than 0 in any existing message
-		if (ENABLE_ASSERTIONS) assert(inner_commit_i < MAX_COM_COALESCE);
-		struct commit *last_commit = &commit_messages[last_com_mes_i].commit[inner_commit_i];
-		uint64_t last_g_id = *(uint64_t *) &last_commit->g_id;
-		uint64_t new_g_id = g_id - update_op_i;
-		if (last_g_id == new_g_id) {
-			if (last_commit->com_num + update_op_i < MAX_LIDS_IN_A_COMMIT) {
+		last_com_mes_i = (COMMIT_FIFO_SIZE + com_mes_i - 1) % COMMIT_FIFO_SIZE;
+		struct com_message *last_commit = &commit_messages[last_com_mes_i];
+		uint64_t last_l_id = *(uint64_t *) &last_commit->l_id;
+		last_l_id += last_commit->com_num;
+		if (last_l_id == l_id) {
+			if (last_commit->com_num + update_op_i <= MAX_LIDS_IN_A_COMMIT) {
 				last_commit->com_num += update_op_i;
 				return;
 			}
@@ -1616,18 +1611,13 @@ static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t g
 	}
 
 	//otherwise push a new commit
-	inner_commit_i = commit_messages[com_mes_i].coalesce_num;
-	struct commit *new_commit = &commit_messages[com_mes_i].commit[inner_commit_i];
-	memcpy(new_commit->g_id, &g_id, sizeof(uint64_t));
+	struct com_message *new_commit = &commit_messages[com_mes_i];
+	memcpy(new_commit->l_id, &l_id, sizeof(uint64_t));
 	new_commit->com_num = update_op_i;
-	commit_messages[com_mes_i].coalesce_num++;
-	com_fifo->size++; // this represents the number of commits
-	if (commit_messages[com_mes_i].coalesce_num ==  MAX_COM_COALESCE) {
-		MOD_ADD(com_fifo->push_ptr, COMMIT_FIFO_SIZE);
-		commit_messages[com_fifo->push_ptr].coalesce_num = 1;
-	}
+	com_fifo->size++;
+	MOD_ADD(com_fifo->push_ptr, COMMIT_FIFO_SIZE);
 	if (ENABLE_ASSERTIONS) {
-		assert(com_fifo->size <= COMMIT_FIFO_SIZE * MAX_COM_COALESCE);
+		assert(com_fifo->size <= COMMIT_FIFO_SIZE );
 	}
 }
 
@@ -1637,10 +1627,11 @@ static inline void propagate_updates(struct pending_writes *p_writes,
 {
 	uint16_t update_op_i = 0;
 	uint32_t pull_ptr = p_writes->pull_ptr;
-	//struct com_message *commits = com_fifo->commits;
+
+	// Read the latest committed g_id
 	uint64_t committed_g_id = atomic_load_explicit(&committed_global_w_id, memory_order_relaxed);
 	while(p_writes->w_state[p_writes->pull_ptr] == READY) {
-		if (com_fifo->size == MAX_LIDS_IN_A_COMMIT * COMMIT_FIFO_SIZE) break; // the commit fifo is full
+		if (com_fifo->size == COMMIT_FIFO_SIZE) break; // the commit fifo is full TODO that is not strictly speaking correct
 		if (p_writes->write_ops[p_writes->pull_ptr].g_id != committed_g_id + 1) break;
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
 		if (p_writes->is_local[p_writes->pull_ptr]) {
@@ -1648,23 +1639,21 @@ static inline void propagate_updates(struct pending_writes *p_writes,
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;
 		}
-		// Add the acked gid to the appropriate commit message
-
-		//p_writes->write_ops[p_writes->pull_ptr].g_id = 0;
 		MOD_ADD(p_writes->pull_ptr, LEADER_PENDING_WRITES);
 		update_op_i++;
 		committed_g_id++;
 	}
 	if (update_op_i > 0) {
 		uint16_t last_w_ptr = (LEADER_PENDING_WRITES + p_writes->pull_ptr - 1) % LEADER_PENDING_WRITES;
-		forge_commit_message(com_fifo, p_writes->write_ops[last_w_ptr].g_id, update_op_i);
+		forge_commit_message(com_fifo, p_writes->local_w_id, update_op_i);
+		p_writes->local_w_id += update_op_i; // advance the local_w_id
 		struct cache_op * tmp_ptr = (struct cache_op *) &(p_writes->write_ops[pull_ptr]);
 		cache_batch_op_updates((uint32_t) update_op_i, 0, &tmp_ptr, resp);
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
 	}
 }
 
-static inline void poll_for_writes(struct w_message_ud_req *incoming_ws, int *pull_ptr,
+static inline void poll_for_writes(struct w_message_ud_req *incoming_ws, uint32_t *pull_ptr,
 																	 struct pending_writes *p_writes,
 																	 struct ibv_cq * w_recv_cq, struct ibv_wc *w_recv_wc)
 {
@@ -1797,8 +1786,8 @@ static inline void forge_commit_wrs(struct com_message *com_mes,
 {
   struct ibv_wc signal_send_wc;
   com_send_sgl[br_i].addr = (uint64_t) (uintptr_t) com_mes;
-  com_send_sgl[br_i].length = COM_MES_HEADER_SIZE + (COM_SIZE * com_mes->coalesce_num);
-	if (ENABLE_ASSERTIONS) assert(com_send_sgl[br_i].length <= LDR_COM_SEND_SIZE);
+  com_send_sgl[br_i].length = LDR_COM_SEND_SIZE;
+	//if (ENABLE_ASSERTIONS) assert(com_send_sgl[br_i].length <= LDR_COM_SEND_SIZE);
   //green_printf("Leader %d : I BROADCAST a message with %d commits with %s credits: %d \n",
      //          com_mes->com_num, code_to_str(commits[br_i].opcode), credits[COMM_VC][0]);
 
@@ -1865,16 +1854,15 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
     (*commit_br_tx)++;
     for (uint16_t j = 0; j < FOLLOWER_MACHINE_NUM; j++) { credits[COMM_VC][j]--; }
     if ((*commit_br_tx) % CREDITS_IN_MESSAGE == 0) credit_recv_counter++;
-		for (uint16_t i = 0; i < com_mes->coalesce_num; i++)
-			commits_sent += com_mes->commit[i].com_num;
-		com_fifo->size-= com_mes->coalesce_num;
-		// DOn@T zero the coalesce_num yet because there may be no INLINING
+		commits_sent += com_mes->com_num;
+		com_fifo->size--;
+		// Don't zero the com_num because there may be no INLINING
 		MOD_ADD(com_fifo->pull_ptr, COMMIT_FIFO_SIZE);
     br_i++;
 		if (ENABLE_ASSERTIONS) {
 			assert(br_i <= COMMIT_CREDITS);
 			assert(com_fifo->size <= COMMIT_FIFO_SIZE);
-			assert(com_mes->coalesce_num > 0 && com_mes->coalesce_num < MAX_COM_COALESCE);
+			assert(com_mes->com_num > 0 && com_mes->com_num < MAX_LIDS_IN_A_COMMIT);
 		}
     if (br_i == MAX_BCAST_BATCH) {
 			if (*posted_w_recvs < LDR_MAX_RECV_W_WRS) {

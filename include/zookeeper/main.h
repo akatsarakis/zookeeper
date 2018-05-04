@@ -264,7 +264,7 @@
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
 #define MAX_LIDS_IN_AN_ACK K_64_
 #define ACK_SIZE 12
-#define MAX_ACK_COALESCE 5
+//#define MAX_ACK_COALESCE 5
 #define COM_ACK_HEADER_SIZE 4 // follower id, opcode, coalesce_num
 #define FLR_ACK_SEND_SIZE (12) // a local global id and its metadata
 #define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
@@ -272,10 +272,10 @@
 
 // -- COMMITS-----
 #define MAX_LIDS_IN_A_COMMIT K_64_
-#define COM_SIZE 10 // gid(8) + com_num(2)
+#define COM_SIZE 8 // gid(8)
 #define COM_MES_HEADER_SIZE 4 // opcode + coalesce num
-#define MAX_COM_COALESCE 2
-#define LDR_COM_SEND_SIZE (MAX_COM_COALESCE * COM_SIZE + COM_MES_HEADER_SIZE)
+//#define MAX_COM_COALESCE 2
+#define LDR_COM_SEND_SIZE (COM_SIZE + COM_MES_HEADER_SIZE)
 #define FLR_COM_RECV_SIZE (GRH_SIZE + LDR_COM_SEND_SIZE)
 #define COM_ENABLE_INLINING ((LDR_COM_SEND_SIZE < MAXIMUM_INLINE_SIZE) ? 1: 0)
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
@@ -567,17 +567,16 @@ struct ack_message_ud_req {
 
  };
 
-struct commit {
-	uint16_t com_num;
-	uint8_t g_id[8];
-};
+//struct commit {
+//	uint16_t com_num;
+//	uint8_t l_id[8];
+//};
 
 // The format of a commit message
 struct com_message {
-  uint16_t coalesce_num;
+  uint16_t com_num;
 	uint16_t opcode;
-	//uint8_t commit[MAX_COM_COALESCE * COM_SIZE];
-	struct commit commit[MAX_COM_COALESCE];
+	uint8_t l_id[8];
 };
 
 struct com_message_ud_req {

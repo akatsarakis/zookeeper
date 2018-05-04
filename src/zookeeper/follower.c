@@ -28,8 +28,8 @@ void *follower(void *arg)
                                               MASTER_SHM_KEY + t_id, /* key */
                                               recv_q_depths, send_q_depths); /* Depth of the dgram RECV Q*/
 
-  int prep_push_ptr = 0, prep_pull_ptr = -1;
-  int com_push_ptr = 0, com_pull_ptr = -1;
+  uint32_t prep_push_ptr = 0, prep_pull_ptr = 0;
+  uint32_t com_push_ptr = 0, com_pull_ptr = 0;
   struct ud_req *prep_buffer = (struct ud_req *)(cb->dgram_buf);
   struct ud_req *com_buffer = (struct ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SLOTS);
   /* ---------------------------------------------------------------------------

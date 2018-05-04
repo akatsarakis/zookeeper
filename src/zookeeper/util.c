@@ -21,14 +21,14 @@ void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb)
 
             /* Get the UD queue pair for the ith machine */
             follower_qp[i][qp_i] = NULL;
-//            printf("Leader %d is Looking for follower %s \n", g_id, follower_name);
+//            printf("Leader %d is Looking for follower %s \n", l_id, follower_name);
             while(follower_qp[i][qp_i] == NULL) {
                 follower_qp[i][qp_i] = hrd_get_published_qp(follower_name);
                 if(follower_qp[i][qp_i] == NULL)
                     usleep(200000);
             }
             // printf("main:Leader %d found clt %d. Client LID: %d\n",
-            //        g_id, i, follower_qp[i][qp_i]->lid);
+            //        l_id, i, follower_qp[i][qp_i]->lid);
             struct ibv_ah_attr ah_attr = {
                 //-----INFINIBAND----------
                 .is_global = 0,
@@ -74,16 +74,16 @@ void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb) {
             sprintf(ldr_name, "leader-dgram-%d-%d", i, qp_i);
             /* Get the UD queue pair for the ith leader thread */
             leader_qp[i][qp_i] = NULL;
-//          printf("Follower %d is Looking for leader %s\n", g_id, ldr_name);
+//          printf("Follower %d is Looking for leader %s\n", l_id, ldr_name);
           while (leader_qp[i][qp_i] == NULL) {
                 leader_qp[i][qp_i] = hrd_get_published_qp(ldr_name);
-                //printf("Follower %d is expecting leader %s\n" , g_id, ldr_name);
+                //printf("Follower %d is expecting leader %s\n" , l_id, ldr_name);
                 if (leader_qp[i][qp_i] == NULL) {
                     usleep(200000);
                 }
             }
             //  printf("main: Follower %d found Leader %d. Leader LID: %d\n",
-            //  	g_id, i, leader_qp[i][qp_i]->lid);
+            //  	l_id, i, leader_qp[i][qp_i]->lid);
 
             struct ibv_ah_attr ah_attr = {
               //-----INFINIBAND----------
@@ -164,7 +164,7 @@ void createAHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
     }
 }
 
-/* Generate a random permutation of [0, n - 1] for client @g_id */
+/* Generate a random permutation of [0, n - 1] for client @l_id */
 int* get_random_permutation(int n, int clt_gid, uint64_t *seed) {
     int i, j, temp;
     assert(n > 0);
@@ -389,8 +389,8 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
     if (clt_gid  == 0) printf("Hottest keys percentage of the trace: %.2f%% for %d keys \n",
                               (double) (hottest_key_counter * 100) / cmd_count, HOTTEST_KEYS_TO_TRACK);
     (*cmds)[cmd_count].opcode = NOP;
-    // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",g_id, cmd_count, debug_cnt,
-    //         t_stats[g_id].hot_keys_per_trace, t_stats[g_id].cold_keys_per_trace );
+    // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
+    //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
     assert(cmd_count == debug_cnt);
     fclose(fp);
     if (line)
@@ -429,8 +429,8 @@ void manufacture_trace(struct trace_command **cmds, int g_id)
 
   if (g_id  == 0) printf("Write Ratio: %.2f%% \n, Trace size %d", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
   (*cmds)[TRACE_SIZE].opcode = NOP;
-  // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",g_id, cmd_count, debug_cnt,
-  //         t_stats[g_id].hot_keys_per_trace, t_stats[g_id].cold_keys_per_trace );
+  // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
+  //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
 }
 
 void trace_init(struct trace_command **cmds, int g_id) {
@@ -441,7 +441,7 @@ void trace_init(struct trace_command **cmds, int g_id) {
         //get / creat path for the trace
         if (LEADERS_PER_MACHINE <= 23) sprintf(local_client_id, "%d", (g_id % LEADERS_PER_MACHINE));
         else  sprintf(local_client_id, "%d", (g_id % 23));// the traces are for 8 clients
-        // sprintf(local_client_id, "%d", (g_id % 4));
+        // sprintf(local_client_id, "%d", (l_id % 4));
         sprintf(machine_num, "%d", machine_id);
         char path[2048];
         char cwd[1024];
@@ -456,9 +456,9 @@ void trace_init(struct trace_command **cmds, int g_id) {
                  "/../../traces/current-splited-traces/s_",
                  machine_num, "_c_", local_client_id, "_a_", SKEW_EXPONENT_A, ".txt");
         //initialize the command array from the trace file
-        // printf("Thread: %d attempts to read the trace: %s\n", g_id, path);
+        // printf("Thread: %d attempts to read the trace: %s\n", l_id, path);
         parse_trace(path, cmds, g_id % LEADERS_PER_MACHINE);
-        //printf("Trace read by client: %d\n", g_id);
+        //printf("Trace read by client: %d\n", l_id);
     }else {
       manufacture_trace(cmds, g_id);
     }
@@ -1074,17 +1074,17 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
 
 // Prepost Receives on the Leader Side
 // Post receives for the coherence traffic in the init phase
-void pre_post_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, bool enable_mcast_receive, struct mcast_essentials *mcast, void* buf,
+void pre_post_recvs(struct hrd_ctrl_blk *cb, uint32_t* push_ptr, bool enable_mcast_receive, struct mcast_essentials *mcast, void* buf,
                     uint32_t max_reqs, uint32_t number_of_recvs, uint16_t QP_ID, uint32_t message_size)
 {
   uint32_t i;//, j;
   for(i = 0; i < number_of_recvs; i++) {
       if (enable_mcast_receive) {
-        hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * message_size),
+        hrd_post_dgram_recv(mcast->recv_qp,	(buf + *push_ptr * message_size),
                             message_size, mcast->recv_mr->lkey);
       }
       else hrd_post_dgram_recv(cb->dgram_qp[QP_ID],
-                               (void *) (buf + *push_ptr * message_size), message_size, cb->dgram_buf_mr->lkey);
+                               (buf + *push_ptr * message_size), message_size, cb->dgram_buf_mr->lkey);
       MOD_ADD(*push_ptr, max_reqs);
   }
 }

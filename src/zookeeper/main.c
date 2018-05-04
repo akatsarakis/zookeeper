@@ -53,11 +53,11 @@ int main(int argc, char *argv[])
 //	if (LEADER_ENABLE_INLINING == 1) assert((MAX_COALESCE_PER_MACH * HERD_GET_REQ_SIZE) + 1 <= MAXIMUM_INLINE_SIZE);
 
 
-  green_printf("COMMIT: commit size %lu/%d, commit message %lu/%d, commit message ud req %llu/%d\n",
-               sizeof(struct commit), COM_SIZE, sizeof(struct com_message), LDR_COM_SEND_SIZE,
+  green_printf("COMMIT: commit message %lu/%d, commit message ud req %llu/%d\n",
+               sizeof(struct com_message), LDR_COM_SEND_SIZE,
                sizeof(struct com_message_ud_req), FLR_COM_RECV_SIZE);
-  cyan_printf("ACK: ack size %lu/%d, ack message %lu/%d, ack message ud req %llu/%d\n",
-               sizeof(struct ack), ACK_SIZE, sizeof(struct ack_message), FLR_ACK_SEND_SIZE,
+  cyan_printf("ACK: ack message %lu/%d, ack message ud req %llu/%d\n",
+               sizeof(struct ack_message), FLR_ACK_SEND_SIZE,
                sizeof(struct ack_message_ud_req), LDR_ACK_RECV_SIZE);
 
 

@@ -29,8 +29,8 @@ void *leader(void *arg)
 												MASTER_SHM_KEY + t_id, /* key */
 												recv_q_depths, send_q_depths); /* Depth of the dgram RECV Q*/
 
-  int ack_buf_push_ptr = 0, ack_buf_pull_ptr = -1;
-  int w_buf_push_ptr = 0, w_buf_pull_ptr = -1;
+  uint32_t ack_buf_push_ptr = 0, ack_buf_pull_ptr = 0;
+  uint32_t w_buf_push_ptr = 0, w_buf_pull_ptr = 0;
   struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE); // leave a slot for the credits
   struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE + LEADER_ACK_BUF_SIZE);
 	/* ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ void *leader(void *arg)
 		------------------------------ PROPAGATE UPDATES--------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      /* After propagating the acked messages we push their g_id to a fifo buffer
+      /* After propagating the acked messages we push their l_id to a fifo buffer
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
