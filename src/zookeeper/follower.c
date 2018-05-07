@@ -8,8 +8,7 @@ void *follower(void *arg)
   int global_id = machine_id > LEADER_MACHINE ? ((machine_id - 1) * FOLLOWERS_PER_MACHINE) + params.id :
                   (machine_id * FOLLOWERS_PER_MACHINE) + params.id;
   uint16_t t_id = params.id;
-  uint16_t leader_qp_i = (uint16_t) ((t_id + machine_id) % FOLLOWER_QP_NUM);
-
+  uint16_t remote_ldr_thread = t_id;
   if (ENABLE_MULTICAST == 1 && t_id == 0) {
       red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
       // TODO to fix it we must post receives seperately for acks and multicasts
@@ -30,8 +29,8 @@ void *follower(void *arg)
 
   uint32_t prep_push_ptr = 0, prep_pull_ptr = 0;
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
-  struct ud_req *prep_buffer = (struct ud_req *)(cb->dgram_buf);
-  struct ud_req *com_buffer = (struct ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SLOTS);
+  struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
+  struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SLOTS);
   /* ---------------------------------------------------------------------------
   ------------------------------MULTICAST SET UP-------------------------------
   ---------------------------------------------------------------------------*/
@@ -111,14 +110,23 @@ void *follower(void *arg)
   struct key_home *key_homes, *next_key_homes, *third_key_homes;
   struct mica_resp *resp, *next_resp, *third_resp;
   struct mica_resp update_resp[BCAST_TO_CACHE_BATCH] = {0}, inv_resp[BCAST_TO_CACHE_BATCH];
-  struct ibv_mr *ops_mr, *coh_mr;
+  struct ibv_mr *ops_mr, *w_mr;
   struct extended_cache_op *ops, *next_ops, *third_ops;
   set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
              &key_homes, &next_key_homes, &third_key_homes);
   set_up_coh_ops(&update_ops, &ack_bcast_ops, &inv_ops, &inv_to_send_ops, update_resp, inv_resp, &coh_buf, protocol);
-  set_up_mrs(&ops_mr, &coh_mr, ops, coh_buf, cb);
+  set_up_mrs(&ops_mr, &w_mr, ops, coh_buf, cb);
   uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
+  struct recv_info *prep_recv_info, *com_recv_info;
+  init_recv_info(&prep_recv_info, &prep_push_ptr, FLR_PREP_BUF_SLOTS,
+                 FLR_PREP_RECV_SIZE, FLR_MAX_RECV_PREP_WRS, prep_recv_wr,
+                 cb->dgram_qp[PREP_ACK_QP_ID], prep_recv_sgl, (void*) prep_buffer);
+  init_recv_info(&com_recv_info, &com_push_ptr, FLR_COM_BUF_SLOTS,
+                 FLR_COM_RECV_SIZE, FLR_MAX_RECV_COM_WRS, com_recv_wr,
+                 cb->dgram_qp[COMMIT_W_QP_ID], com_recv_sgl, (void*) com_buffer);
 
+  struct flr_p_writes *p_writes;
+//  set_up_pending_writes(&p_writes, FLR_PENDING_WRITES);
 
 
   /* ---------------------------------------------------------------------------
@@ -126,22 +134,14 @@ void *follower(void *arg)
     ---------------------------------------------------------------------------*/
   // SEND AND RECEIVE WRs
 //  set_up_remote_WRs(w_send_wr, w_send_sgl, prep_recv_wr, &prep_recv_sgl, cb, t_id, ops_mr, protocol);
-  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
 //      set_up_credits(credits, credit_send_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-//      set_up_coh_WRs(ack_send_wr, ack_send_sgl, com_recv_wr, com_recv_sgl,
-//                     ack_wr, ack_sgl, coh_buf, t_id, cb, coh_mr, mcast, protocol);
-  }
+    set_up_follower_WRs(ack_send_wr, ack_send_sgl, prep_recv_wr, prep_recv_sgl, w_send_wr, w_send_sgl,
+                        com_recv_wr, com_recv_sgl, remote_ldr_thread, cb, w_mr, mcast);
+
   // TRACE
   struct trace_command *trace;
   trace_init(&trace, t_id);
-  /* ---------------------------------------------------------------------------
-  ------------------------------Prepost RECVS-----------------------------------
-  ---------------------------------------------------------------------------*/
-  /* Remote Requests */
-//    for(i = 0; i < WINDOW_SIZE; i++) {
-//        hrd_post_dgram_recv(cb->dgram_qp[REMOTE_UD_QP_ID],
-//                            (void *) cb->dgram_buf, remote_buf_size, cb->dgram_buf_mr->lkey);
-//    }
+
   /* ---------------------------------------------------------------------------
   ------------------------------LATENCY AND DEBUG-----------------------------------
   ---------------------------------------------------------------------------*/
@@ -154,47 +154,24 @@ void *follower(void *arg)
   ------------------------------START LOOP--------------------------------
   ---------------------------------------------------------------------------*/
   while(1) {
-      // Swap the op buffers to facilitate correct ordering
-      swap_ops(&ops, &next_ops, &third_ops,
-               &resp, &next_resp, &third_resp,
-              NULL, NULL, NULL);
 
-      if (unlikely(credit_debug_cnt > M_1)) {
-          red_printf("Follower %d misses credits \n", t_id);
+    if (unlikely(credit_debug_cnt > M_1)) {
+        red_printf("Follower %d misses credits \n", t_id);
 //          red_printf("Ack credits %d , inv Credits %d , UPD credits %d \n", credits[ACK_VC][(machine_id + 1) % MACHINE_NUM],
 //                     credits[INV_VC][(machine_id + 1) % MACHINE_NUM], credits[UPD_VC][(machine_id + 1) % MACHINE_NUM]);
-          credit_debug_cnt = 0;
-      }
+        credit_debug_cnt = 0;
+    }
 
 
   /* ---------------------------------------------------------------------------
-  ------------------------------ POLL BROADCAST REGION--------------------------
+  ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
-//      memset(coh_message_count, 0, VIRTUAL_CHANNELS * MACHINE_NUM * sizeof(uint16_t));
-//      upd_count = 0;
-//      update_ops_i = 0;
-//      inv_ops_i = 0;
-//      ack_ops_i = 0;
-      uint16_t polled_messages = 0;
-      if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-          poll_coherence_LIN(&update_ops_i, prep_buffer, &prep_pull_ptr, update_ops, t_id, t_id,
-                             ack_size, &polled_messages, ack_ops_i, inv_size, &inv_ops_i, inv_ops);
-      }
+    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes);
+
   /* ---------------------------------------------------------------------------
-  ------------------------------SEND UPDS AND ACKS TO THE CACHE------------------
+  ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
-      if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-          // Propagate updates and acks to the cache, find all acks that are complete to broadcast updates
-          if (ENABLE_ASSERTIONS == 1) assert(update_ops_i <= BCAST_TO_CACHE_BATCH);
-          if (update_ops_i > 0) {
-              cache_batch_op_lin_non_stalling_sessions_with_cache_op(update_ops_i, t_id, &update_ops,
-                                                                     update_resp);
-              // the bookkeeping involves the wak-up logic and the latency measurement for the hot writes
-              updates_and_acks_bookkeeping(update_ops_i, update_ops, &latency_info, ops, &start,
-                                           t_id, resp, update_resp, coh_message_count,
-                                           ack_bcast_ops, &ack_push_ptr, &ack_size);
-          }
-      }
+
   /* ---------------------------------------------------------------------------
   ------------------------------PROBE THE CACHE--------------------------------------
   ---------------------------------------------------------------------------*/

@@ -168,6 +168,15 @@ void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
                     struct ibv_send_wr*, struct ibv_sge*,
                     struct mica_op*, uint16_t, uint16_t, struct hrd_ctrl_blk*, struct ibv_mr*,
                     struct ibv_mr*, struct mcast_essentials*);
+// Set up all Follower WRs
+void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_send_sgl,
+                         struct ibv_recv_wr *prep_recv_wr, struct ibv_sge *prep_recv_sgl,
+                         struct ibv_send_wr *w_send_wr, struct ibv_sge *w_send_sgl,
+                         struct ibv_recv_wr *com_recv_wr, struct ibv_sge *com_recv_sgl,
+                         uint16_t remote_thread,
+                         struct hrd_ctrl_blk *cb, struct ibv_mr *w_mr,
+                         struct mcast_essentials *mcast);
+
 // Post receives for the coherence traffic in the init phase
 void pre_post_recvs(struct hrd_ctrl_blk*, uint32_t* , bool, struct mcast_essentials*, void*,
                     uint32_t, uint32_t, uint16_t, uint32_t);

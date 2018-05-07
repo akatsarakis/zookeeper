@@ -261,6 +261,7 @@
 #define PREP_BCAST_SS_BATCH MAX((MIN_SS_BATCH / (FOLLOWER_MACHINE_NUM)), (MAX_BCAST_BATCH + 2))
 
 
+
 // -------ACKS-------------
 #define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
 #define MAX_LIDS_IN_AN_ACK K_64_
@@ -288,6 +289,7 @@
 #define WRITE_MESSAGES_VALUE_SIZE (MAX_W_COALESCE * SINGLE_WRITE_PAYLOAD)
 #define FLR_W_SEND_SIZE (WRITE_MESSAGES_VALUE_SIZE)
 #define LDR_W_RECV_SIZE (GRH_SIZE + FLR_W_SEND_SIZE)
+#define FLR_PREPARE_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
 #define MAX_PREP_COALESCE 2
@@ -295,7 +297,7 @@
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
 #define FLR_PREP_RECV_SIZE (GRH_SIZE + LDR_PREP_SEND_SIZE)
-#define PREP_FIFO_SIZE (LEADER_PENDING_WRITES)
+
 #define LEADER_PREPARE_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (LDR_PREP_SEND_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
 
 
@@ -313,7 +315,7 @@
 
 //--------FOLLOWER--------------
 // // PREP_ACK_QP_ID 0: receive Prepares -- send ACKs
-#define FLR_MAX_ACK_WRS (PREPARE_CREDITS)
+#define FLR_MAX_ACK_WRS (1)
 #define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS)
 // COMMIT_W_QP_ID 1: send Writes  -- receive Commits
 #define FLR_MAX_W_WRS (W_CREDITS)
@@ -321,6 +323,7 @@
 // Credits WRs
 #define FLR_MAX_CREDIT_WRS (COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE )
 #define FLR_MAX_CREDIT_RECV (W_CREDITS / LDR_CREDITS_IN_MESSAGE)
+#define ACK_SEND_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_ACK_WRS + 2))
 
 //-- LEADER
 #define LEADER_W_BUF_SIZE ((LDR_W_RECV_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
@@ -332,17 +335,19 @@
 
 #define LEADER_REMOTE_W_SLOTS (FOLLOWER_MACHINE_NUM * W_CREDITS * MAX_W_COALESCE)
 #define LEADER_PENDING_WRITES (SESSIONS_PER_THREAD + LEADER_REMOTE_W_SLOTS)
-
+#define PREP_FIFO_SIZE (LEADER_PENDING_WRITES)
 
 
 //--FOLLOWER
 #define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE  * PREPARE_CREDITS)
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * COMMIT_CREDITS)
-#define FLR_PREP_BUF_SLOTS (PREPARE_CREDITS)
+#define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
 #define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
 #define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
 
+#define FLR_PENDING_WRITES (2 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
+#define FLR_DISALLOW_OUT_OF_ORDER_PREPARES 1
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
 --------------------------------------------------*/
@@ -633,11 +638,34 @@ struct pending_writes {
 	uint32_t prep_pull_ptr; // Where to pull prepares from
 	uint32_t size;
 	uint32_t unordered_ptr;
+	uint8_t *flr_id;
 	uint8_t *acks_seen;
+	bool *is_local;
+	bool *session_has_pending_write;
+	bool all_sessions_stalled;
+};
+
+// follower pending writes
+struct flr_p_writes {
+	uint64_t *g_id;
+	struct cache_op **ptrs_to_ops;
+	uint64_t local_w_id;
+	uint32_t *session_id;
+	enum write_state *w_state;
+	uint32_t push_ptr;
+	uint32_t pull_ptr;
+	uint32_t size;
 	uint8_t *flr_id;
 	bool *is_local;
 	bool *session_has_pending_write;
 	bool all_sessions_stalled;
+};
+
+// struct for the follower to keep track of the acks it has sent
+struct pending_acks {
+	uint32_t slots_ahead;
+	uint32_t acks_to_send;
+
 };
 
 struct recv_info {

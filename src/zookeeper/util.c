@@ -1,3 +1,4 @@
+#include <infiniband/verbs.h>
 #include "util.h"
 #include "city.h"
 
@@ -1010,9 +1011,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
     (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
     (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
     (*p_writes)->ptrs_to_ops = (struct cache_op**) malloc(size * sizeof(struct cache_op*));
-    //  (*p_writes)->unordered_writes_num = 0; (*p_writes)->writes_num = 0;
-    //  (*p_writes)->pull_ptr = 0; (*p_writes)->push_ptr = 0;
-    //  (*p_writes)->size = 0;
+
 
     memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
     (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
@@ -1244,38 +1243,63 @@ void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv
   }
 }
 
+/* ---------------------------------------------------------------------------
+------------------------------FOLLOWER --------------------------------------
+---------------------------------------------------------------------------*/
 
 // Set up all Follower WRs
-void set_up_follower_WRs(struct ibv_send_wr *send_wr, struct ibv_sge *send_sgl,
-                    struct ibv_recv_wr *recv_wr, struct ibv_sge *recv_sgl,
-                    struct ibv_send_wr *ack_wr, struct ibv_sge *ack_sgl,
-                    struct mica_op *buf, uint16_t t_id, uint16_t remote_thread,
-                    struct hrd_ctrl_blk *cb, struct ibv_mr *mr,
-                    struct mcast_essentials *mcast, int protocol)
+void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_send_sgl,
+                         struct ibv_recv_wr *prep_recv_wr, struct ibv_sge *prep_recv_sgl,
+                         struct ibv_send_wr *w_send_wr, struct ibv_sge *w_send_sgl,
+                         struct ibv_recv_wr *com_recv_wr, struct ibv_sge *com_recv_sgl,
+                         uint16_t remote_thread,
+                         struct hrd_ctrl_blk *cb, struct ibv_mr *w_mr,
+                         struct mcast_essentials *mcast)
 {
-
-
   uint16_t i, j;
-
-
-  if (protocol == FOLLOWER) {
-    send_wr[i].wr.ud.ah = remote_leader_qp[remote_thread][BROADCAST_UD_QP_ID].ah;
-    send_wr[i].wr.ud.remote_qpn = (uint32) remote_leader_qp[remote_thread][BROADCAST_UD_QP_ID].qpn;
-  }
-  if (protocol == FOLLOWER) send_wr[i].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
-  if (protocol == FOLLOWER) send_wr[i].imm_data = (uint32) machine_id;
-  // Do acknowledgements
-  if (protocol == FOLLOWER) {
-    // ACK WRs
-    for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
-      ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-      //ack_wr[i].imm_data = machine_id;
-      ack_sgl[i].length = HERD_GET_REQ_SIZE;
-      ack_wr[i].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
-      ack_wr[i].num_sge = 1;
-      ack_wr[i].sg_list = &ack_sgl[i];
+    // ACKS
+    ack_send_wr->wr.ud.ah = remote_leader_qp[remote_thread][PREP_ACK_QP_ID].ah;
+    ack_send_wr->wr.ud.remote_qpn = (uint32) remote_leader_qp[remote_thread][PREP_ACK_QP_ID].qpn;
+    ack_send_wr->wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+    ack_send_wr->opcode = IBV_WR_SEND;
+    ack_send_wr->send_flags = IBV_SEND_INLINE;
+    ack_send_sgl->length = FLR_ACK_SEND_SIZE;
+    ack_send_wr->num_sge = 1;
+    ack_send_wr->sg_list = ack_send_sgl;
+    ack_send_wr->next = NULL;
+    // WRITES
+    for (i = 0; i < FLR_MAX_W_WRS; ++i) {
+        w_send_wr[i].wr.ud.ah = remote_leader_qp[remote_thread][COMMIT_W_QP_ID].ah;
+        w_send_wr[i].wr.ud.remote_qpn = (uint32) remote_leader_qp[remote_thread][COMMIT_W_QP_ID].qpn;
+        if (FLR_PREPARE_ENABLE_INLINING) w_send_wr[i].send_flags = IBV_SEND_INLINE;
+        else {
+            w_send_sgl[i].lkey = w_mr->lkey;
+            w_send_wr[i].send_flags = 0;
+        }
+        w_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+        w_send_wr[i].opcode = IBV_WR_SEND;
+        w_send_wr[i].num_sge = 1;
+        w_send_wr[i].sg_list = &w_send_sgl[i];
     }
-  }
+    // PREP RECVs
+    for (i = 0; i < FLR_MAX_RECV_PREP_WRS; i++) {
+        prep_recv_sgl[i].length = (uint32_t)FLR_PREP_RECV_SIZE;
+        if (ENABLE_MULTICAST == 1)
+            prep_recv_sgl[i].lkey = mcast->recv_mr->lkey;
+        else  prep_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+        prep_recv_wr[i].sg_list = &prep_recv_sgl[i];
+        prep_recv_wr[i].num_sge = 1;
+    }
+    // COM RECVs
+    for (i = 0; i < FLR_MAX_RECV_COM_WRS; i++) {
+        com_recv_sgl[i].length = (uint32_t)FLR_COM_RECV_SIZE;
+        if (ENABLE_MULTICAST == 1)
+            com_recv_sgl[i].lkey = mcast->recv_mr->lkey;
+        else  com_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+        com_recv_wr[i].sg_list = &com_recv_sgl[i];
+        com_recv_wr[i].num_sge = 1;
+    }
+
 }
 
 
