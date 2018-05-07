@@ -125,8 +125,11 @@ void *follower(void *arg)
                  FLR_COM_RECV_SIZE, FLR_MAX_RECV_COM_WRS, com_recv_wr,
                  cb->dgram_qp[COMMIT_W_QP_ID], com_recv_sgl, (void*) com_buffer);
 
-  struct flr_p_writes *p_writes;
-//  set_up_pending_writes(&p_writes, FLR_PENDING_WRITES);
+  struct pending_writes *p_writes;
+  struct pending_acks *p_acks = (struct pending_acks *) malloc(sizeof(struct pending_acks));
+  struct ack_message *ack = (struct ack_message *)malloc(sizeof(struct ack_message));
+  memset(p_acks, 0, sizeof(struct pending_acks));
+  set_up_pending_writes(&p_writes, FLR_PENDING_WRITES);
 
 
   /* ---------------------------------------------------------------------------
@@ -166,24 +169,23 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
-    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes);
+    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
+                      prep_recv_wc, prep_recv_info);
 
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
-
+    send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
+                     prep_recv_info, t_id,  ack, p_acks);
   /* ---------------------------------------------------------------------------
   ------------------------------PROBE THE CACHE--------------------------------------
   ---------------------------------------------------------------------------*/
 
-      // Propagate the updates before probing the cache
-      trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
-                                             resp, key_homes, 0, next_op_i,
-                                             &latency_info, &start, hottest_keys_pointers);
+//      // Propagate the updates before probing the cache
+//      trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
+//                                             resp, key_homes, 0, next_op_i,
+//                                             &latency_info, &start, hottest_keys_pointers);
 
-  // Print out some window stats periodically
-  if (ENABLE_WINDOW_STATS == 1 && trigger_measurement(t_id))
-    window_stats(ops, resp);
 
 
   /* ---------------------------------------------------------------------------

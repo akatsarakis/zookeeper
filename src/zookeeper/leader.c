@@ -177,7 +177,7 @@ void *leader(void *arg)
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
       poll_for_acks(ack_buffer, &ack_buf_pull_ptr, p_writes,
-                    credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc);
+                    credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc, ack_recv_info);
 
 
 /* ---------------------------------------------------------------------------

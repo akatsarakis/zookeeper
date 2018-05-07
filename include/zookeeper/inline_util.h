@@ -1562,7 +1562,8 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint32_t *pull_ptr,
 																 struct pending_writes *p_writes,
 																 uint16_t credits[][FOLLOWER_MACHINE_NUM],
-																 struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc)
+																 struct ibv_cq * ack_recv_cq, struct ibv_wc *ack_recv_wc,
+																 struct recv_info *ack_recv_info)
 {
 	uint32_t index = *pull_ptr;
 	uint32_t polled_messages = 0;
@@ -1606,6 +1607,8 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 	*pull_ptr = index;
 	// Poll for the completion of the receives
 	hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
+	if (ENABLE_ASSERTIONS) assert(ack_recv_info->posted_recvs >= polled_messages);
+	ack_recv_info->posted_recvs -= polled_messages;
 }
 
 
@@ -2053,8 +2056,11 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 
 // Poll for prepare messages
 static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps, uint32_t *pull_ptr,
-																		 struct flr_p_writes *p_writes, struct pending_acks *p_acks)
+																		 struct pending_writes *p_writes, struct pending_acks *p_acks,
+																		 struct ibv_cq * prep_recv_cq, struct ibv_wc *prep_recv_wc,
+																		 struct recv_info *prep_recv_info)
 {
+	uint16_t polled_messages = 0;
 	if (p_writes->size == FLR_PENDING_WRITES) return;
 	uint32_t index = *pull_ptr;
 	while(incoming_preps[index].prepare.opcode == ZK_OP) {
@@ -2100,49 +2106,63 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 			p_acks->acks_to_send++;
 		}
 		MOD_ADD(index, FLR_PREP_BUF_SLOTS);
+		polled_messages++;
 	}
 	*pull_ptr = index;
+	hrd_poll_cq(prep_recv_cq, polled_messages, prep_recv_wc);
+	if (ENABLE_ASSERTIONS) assert(prep_recv_info->posted_recvs >= polled_messages);
+	prep_recv_info->posted_recvs -= polled_messages;
+
 }
 
 
 
-static inline void send_acks_to_ldr(struct pending_writes *p_writes, struct ibv_send_wr *ack_wr,
-																		struct ibv_sge *ack_sgl, long long *sent_ack_tx,
+static inline void send_acks_to_ldr(struct pending_writes *p_writes, struct ibv_send_wr *ack_send_wr,
+																		struct ibv_sge *ack_send_sgl, long long *sent_ack_tx,
 																		struct hrd_ctrl_blk *cb, struct recv_info *prep_recv_info,
-																		uint16_t ldr_i, uint8_t flr_id, struct ack_message *ack,
+																		uint8_t flr_id, struct ack_message *ack,
 																		struct pending_acks *p_acks)
 {
 	uint16_t i, send_ack_count = 0, remote_clt_id;
 	struct ibv_wc signal_send_wc;
+	struct ibv_send_wr *bad_send_wr;
 	//      green_printf(" Sending an ack for key %d with version %d \n",
 	//			   inv_to_send_ops[i].key.tag, inv_to_send_ops[i].key.meta.version);
 	//		printf("inv %d/%d counter %d,  cid: %d, inv_size %d, credits %d, debug_ptr %d \n", i, BCAST_TO_CACHE_BATCH,
 	//					 coh_message_count[INV_VC][inv_to_send_ops[i].key.meta.cid], inv_to_send_ops[i].key.meta.cid,
 	//					 (*inv_size), credits[ACK_VC][inv_to_send_ops[i].key.meta.cid], debug_ptr);
 
-	ack_wr->wr.ud.ah = remote_leader_qp[ldr_i][PREP_ACK_QP_ID].ah;
-	ack_wr->wr.ud.remote_qpn = remote_leader_qp[ldr_i][PREP_ACK_QP_ID].qpn;
 	ack->opcode = CACHE_OP_ACK;
 	ack->follower_id = flr_id;
 	ack->ack_num = p_acks->acks_to_send;
 	uint64_t l_id_to_send = p_writes->local_w_id + p_acks->slots_ahead;
 	memcpy(ack->local_id, &l_id_to_send, sizeof(uint64_t));
+	send_ack_count = p_acks->acks_to_send;
 	p_acks->slots_ahead += p_acks->acks_to_send;
 	p_acks->acks_to_send = 0;
-	ack_sgl->addr = (uint64_t) (uintptr_t) ack;
+	ack_send_sgl->addr = (uint64_t) (uintptr_t) ack;
 	if ((*sent_ack_tx) % ACK_SEND_SS_BATCH == 0) {
-		ack_wr->send_flags |= IBV_SEND_SIGNALED;
+		ack_send_wr->send_flags |= IBV_SEND_SIGNALED;
 		// if (local_client_id == 0) green_printf("Sending ack %llu signaled \n", *sent_ack_tx);
 	}
+	else ack_send_wr->send_flags = IBV_SEND_INLINE;
 	if((*sent_ack_tx) % ACK_SEND_SS_BATCH == ACK_SEND_SS_BATCH - 1) {
 		// if (local_client_id == 0) green_printf("Polling for ack  %llu \n", *sent_ack_tx);
 		hrd_poll_cq(cb->dgram_send_cq[PREP_ACK_QP_ID], 1, &signal_send_wc);
 	}
-	send_ack_count++;
+
 	(*sent_ack_tx)++; // Selective signaling
 
-	post_recvs_with_recv_info(prep_recv_info, recv_num);
-
+	// RECEIVES for prepares
+	uint32_t posted_recvs = prep_recv_info->posted_recvs;
+	uint32_t recvs_to_post_num = MIN((FLR_MAX_RECV_PREP_WRS - posted_recvs), send_ack_count);
+	if (recvs_to_post_num > 0)
+		post_recvs_with_recv_info(prep_recv_info, recvs_to_post_num);
+	prep_recv_info->posted_recvs+= recvs_to_post_num;
+	if (ENABLE_ASSERTIONS) assert(recvs_to_post_num <= FLR_MAX_RECV_PREP_WRS);
+	// SEND the ack
+	int ret = ibv_post_send(cb->dgram_qp[PREP_ACK_QP_ID], &ack_send_wr[0], &bad_send_wr);
+	CPE(ret, "ACK ibv_post_send error", ret);
 }
 
 //
