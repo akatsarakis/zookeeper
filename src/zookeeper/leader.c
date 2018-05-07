@@ -93,7 +93,7 @@ void *leader(void *arg)
 
   init_recv_info(&ack_recv_info, &ack_buf_push_ptr, LEADER_ACK_BUF_SLOTS,
                  LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl, (void*) ack_buffer);
-
+  printf("Leader creates recv info\n");
 
 
 
@@ -130,17 +130,15 @@ void *leader(void *arg)
 	set_up_ldr_ops(&ops, &resp, &commit_resp, &coh_buf, &com_fifo);
 	set_up_ldr_mrs(&prep_mr, coh_buf, &com_mr, (void *)com_fifo->commits, cb);
 	uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
-
   struct pending_writes *p_writes;
   set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES);
-
 
 
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
 		---------------------------------------------------------------------------*/
 
-	if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
+	if (WRITE_RATIO > 0) {
     set_up_credits_and_WRs(credits, credit_send_wr, &credit_sgl, credit_recv_wr,
 													 &credit_recv_sgl, cb, protocol, LDR_MAX_CREDIT_WRS, LDR_MAX_CREDIT_RECV);
 		set_up_ldr_WRs(prep_send_wr, prep_send_sgl, ack_recv_wr, ack_recv_sgl,
@@ -177,7 +175,8 @@ void *leader(void *arg)
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
       poll_for_acks(ack_buffer, &ack_buf_pull_ptr, p_writes,
-                    credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc, ack_recv_info);
+                    credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc, ack_recv_info,
+                    t_id);
 
 
 /* ---------------------------------------------------------------------------
@@ -188,17 +187,16 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      propagate_updates(p_writes, com_fifo, commit_resp);
+      propagate_updates(p_writes, com_fifo, commit_resp, t_id);
 
     /* ---------------------------------------------------------------------------
 		------------------------------ BROADCAST COMMITS--------------------------
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
-      if (com_bcast_num > 0)
       broadcast_commits(credits, cb, com_fifo,
                         &commit_br_tx, &credit_debug_cnt, credit_wc,
                         com_send_sgl, com_send_wr, credit_recv_wr,
-                        w_recv_info);
+                        w_recv_info, t_id);
 
 
 		/* ---------------------------------------------------------------------------
@@ -229,16 +227,16 @@ void *leader(void *arg)
 		/* ---------------------------------------------------------------------------
 		------------------------------BROADCASTS--------------------------------------
 		---------------------------------------------------------------------------*/
-		if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
+		if (WRITE_RATIO > 0 )
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
       broadcast_prepares(p_writes, credits, cb, credit_wc, &credit_debug_cnt,
-                         prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info);
+                         prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info, t_id);
 
 //		/* ---------------------------------------------------------------------------
 //		------------------------------SEND CREDITS--------------------------------
 //		---------------------------------------------------------------------------*/
-//		if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
+//		if (WRITE_RATIO > 0) {
 //			/* Find out how many buffer slots have been emptied and create the appropriate
 //				credit messages, for the different types of buffers (Acks, Invs, Upds)
 //				If credits must be sent back, then receives for new coherence messages have to be posted first*/

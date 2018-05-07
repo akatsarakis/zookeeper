@@ -431,7 +431,7 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
       long long *key_ptr_req = (long long *) &(*op)[I];
       if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
         key_in_store[I] = 1;
-        if ((*op)[I].opcode == ZK_OP) {
+        if ((*op)[I].opcode == CACHE_OP_PUT) {
           if (ENABLE_ASSERTIONS) assert((*op)[I].val_len == kv_ptr[I]->val_len);
           optik_lock(&kv_ptr[I]->key.meta);
           memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);

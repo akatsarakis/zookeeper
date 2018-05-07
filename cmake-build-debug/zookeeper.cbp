@@ -107,6 +107,9 @@
 		<Unit filename="/home/vasilis/Documents/houston/zookeeper/include/optik/optik_mod.h">
 			<Option target="zookeeper"/>
 		</Unit>
+		<Unit filename="/home/vasilis/Documents/houston/zookeeper/include/optik/utils.h">
+			<Option target="zookeeper"/>
+		</Unit>
 		<Unit filename="/home/vasilis/Documents/houston/zookeeper/include/zookeeper/cache.h">
 			<Option target="zookeeper"/>
 		</Unit>

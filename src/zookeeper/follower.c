@@ -7,7 +7,9 @@ void *follower(void *arg)
   struct thread_params params = *(struct thread_params *) arg;
   int global_id = machine_id > LEADER_MACHINE ? ((machine_id - 1) * FOLLOWERS_PER_MACHINE) + params.id :
                   (machine_id * FOLLOWERS_PER_MACHINE) + params.id;
+  uint8_t flr_id = machine_id > LEADER_MACHINE ? (machine_id - 1) : machine_id;
   uint16_t t_id = params.id;
+  yellow_printf("FOLLOWER-id %d \n", flr_id);
   uint16_t remote_ldr_thread = t_id;
   if (ENABLE_MULTICAST == 1 && t_id == 0) {
       red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
@@ -170,13 +172,13 @@ void *follower(void *arg)
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
     poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
-                      prep_recv_wc, prep_recv_info);
+                      prep_recv_wc, prep_recv_info, t_id);
 
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
     send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
-                     prep_recv_info, t_id,  ack, p_acks);
+                     prep_recv_info, flr_id,  ack, p_acks, t_id);
   /* ---------------------------------------------------------------------------
   ------------------------------PROBE THE CACHE--------------------------------------
   ---------------------------------------------------------------------------*/
@@ -192,27 +194,27 @@ void *follower(void *arg)
   ------------------------------SEND INVS TO THE CACHE---------------------------
   ---------------------------------------------------------------------------*/
   // As the beetles did not say "all we are saying, is give reads a chance"
-  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-    if (inv_ops_i > 0) {
-      // Proapagate the invalidations to the cache
-      cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(inv_ops_i, t_id, &inv_ops,
-                                     inv_resp);
-      /* Create an array with acks to send out such that we send answers only
-       to the invalidations that succeeded, take care to keep the back pressure:
-       invs that failed trigger credits to be sent back, successful invs still
-       hold buffer space though */
-
-      invs_bookkeeping(inv_ops_i, inv_resp, coh_message_count, inv_ops,
-               inv_to_send_ops, &inv_push_ptr, &inv_size, &debug_ptr);
-    }
-  }
+//  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
+//    if (inv_ops_i > 0) {
+//      // Proapagate the invalidations to the cache
+//      cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(inv_ops_i, t_id, &inv_ops,
+//                                     inv_resp);
+//      /* Create an array with acks to send out such that we send answers only
+//       to the invalidations that succeeded, take care to keep the back pressure:
+//       invs that failed trigger credits to be sent back, successful invs still
+//       hold buffer space though */
+//
+//      invs_bookkeeping(inv_ops_i, inv_resp, coh_message_count, inv_ops,
+//               inv_to_send_ops, &inv_push_ptr, &inv_size, &debug_ptr);
+//    }
+//  }
 
   /* ---------------------------------------------------------------------------
   ------------------------------ACKNOWLEDGEMENTS--------------------------------
   ---------------------------------------------------------------------------*/
 
-  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
-    if (inv_size > 0)
+//  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
+//    if (inv_size > 0)
 //      send_acks(inv_to_send_ops, credits, credit_wc, ack_wr, ack_sgl, &sent_ack_tx, &inv_size,
 //            &ack_recv_counter, credit_recv_wr, t_id, coh_message_count, cb, debug_ptr);
 
@@ -231,7 +233,7 @@ void *follower(void *arg)
 //             credit_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)prep_buffer);
   }
       op_i = 0; bool is_leader_t = false;
-      run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
+//      run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
   }
   return NULL;
 }

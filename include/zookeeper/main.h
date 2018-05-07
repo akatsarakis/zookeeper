@@ -1,11 +1,11 @@
 #ifndef ARMONIA_MAIN_H
 #define ARMONIA_MAIN_H
+
 #include <stdint.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include "city.h"
 #include "hrd.h"
-
 //-------------------------------------------
 /* ----------SYSTEM------------------------ */
 //-------------------------------------------
@@ -618,7 +618,7 @@ struct prep_fifo {
 	uint32_t push_ptr;
 	uint32_t pull_ptr;
 	uint32_t bcast_pull_ptr;
-	uint32_t bcast_size;
+	uint32_t bcast_size; // number of prepares not messages!
 	uint32_t size;
 	uint32_t backward_ptrs[PREP_FIFO_SIZE];
 

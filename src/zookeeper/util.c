@@ -1,6 +1,11 @@
-#include <infiniband/verbs.h>
+//#include <infiniband/verbs.h>
 #include "util.h"
 #include "city.h"
+//#ifndef _GNU_SOURCE
+//# define _GNU_SOURCE
+//#endif
+
+//#include <pthread.h>
 
 // Leader calls this function to connect with its followers
 void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb)
@@ -428,7 +433,7 @@ void manufacture_trace(struct trace_command **cmds, int g_id)
     if ((*cmds)[i].opcode == 1) writes++;
   }
 
-  if (g_id  == 0) printf("Write Ratio: %.2f%% \n, Trace size %d", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
+  if (g_id  == 0) printf("Write Ratio: %.2f%% \n, Trace size %d \n", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
   (*cmds)[TRACE_SIZE].opcode = NOP;
   // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
   //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
@@ -714,7 +719,7 @@ void setup_connections_and_spawn_stats_thread(int global_id, struct hrd_ctrl_blk
         while (atomic_load_explicit(&qps_are_set_up, memory_order_acquire)== 0);  usleep(200000);
     }
     assert(qps_are_set_up == 1);
-    //printf("Thread %d has all the needed ahs\n", local_id );
+//    printf("Thread %d has all the needed ahs\n", global_id );
 }
 
 // set up the OPS buffers
@@ -1001,7 +1006,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 {
     int i;
     (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
-    memset(p_writes, 0, sizeof(struct pending_writes));
+    memset((*p_writes), 0, sizeof(struct pending_writes));
     //(*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
     (*p_writes)->g_id = (uint64_t*) malloc(size * sizeof(uint64_t));
     (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
@@ -1012,12 +1017,12 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
     (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
     (*p_writes)->ptrs_to_ops = (struct cache_op**) malloc(size * sizeof(struct cache_op*));
 
-
     memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
     (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
     memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
     (*p_writes)->prep_fifo->prep_message =
       (struct prep_message*) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
+    memset((*p_writes)->prep_fifo->prep_message, 0, PREP_FIFO_SIZE * sizeof(struct prep_message));
     //init_fifo(&(*p_writes)->prep_fifo, PREP_FIFO_SIZE * sizeof(struct prep_message));
     assert((*p_writes)->prep_fifo != NULL);
     //  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
@@ -1030,9 +1035,9 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
     }
     struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
     for (i = 0; i < PREP_FIFO_SIZE; i++) {
-        preps[i].opcode = ZK_OP;
+        preps[i].opcode = CACHE_OP_PUT;
         for(uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
-            preps[i].prepare[j].opcode = ZK_OP;
+            preps[i].prepare[j].opcode = CACHE_OP_PUT;
             preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
         }
     }
@@ -1131,7 +1136,7 @@ void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
   for(i = 0; i <  CACHE_BATCH_SIZE; i++) (*resp)[i].type = EMPTY;
   for(i = 0; i <  LEADER_PENDING_WRITES; i++) (*commit_resp)[i].type = EMPTY;
   for(i = 0; i <  COMMIT_CREDITS; i++) {
-      (*com_fifo)->commits[i].opcode = ZK_OP;
+      (*com_fifo)->commits[i].opcode = CACHE_OP_PUT;
   }
   assert(*ops != NULL && *resp != NULL && *commit_resp != NULL && *buf != NULL);
 

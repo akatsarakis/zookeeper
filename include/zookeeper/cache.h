@@ -11,7 +11,6 @@
 #include "hrd.h"
 #include "main.h"
 #include "mica.h"
-
 #define CACHE_DEBUG 0
 #define CACHE_NUM_BKTS (128 * 1024) //64K buckets seems to be enough to store most of 250K keys
 #define CACHE_NUM_KEYS (25 * 1000)
