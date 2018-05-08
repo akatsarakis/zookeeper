@@ -19,7 +19,7 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 4
+#define FOLLOWERS_PER_MACHINE 1
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
 #define MACHINE_NUM 2
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
@@ -339,10 +339,10 @@
 
 
 //--FOLLOWER
-#define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE  * PREPARE_CREDITS)
-#define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * COMMIT_CREDITS)
 #define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
+#define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE * FLR_PREP_BUF_SLOTS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
+#define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
 #define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
 #define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
 
@@ -629,7 +629,7 @@ struct prep_fifo {
 struct pending_writes {
 	uint64_t *g_id;
 	struct prep_fifo *prep_fifo;
-	struct cache_op **ptrs_to_ops;
+	struct prepare **ptrs_to_ops;
 	uint64_t local_w_id;
 	uint32_t *session_id;
 	enum write_state *w_state;
@@ -669,7 +669,7 @@ struct pending_acks {
 };
 
 struct recv_info {
-	uint32_t *push_ptr;
+	uint32_t push_ptr;
 	uint32_t buf_slots;
 	uint32_t slot_size;
 	uint32_t posted_recvs;

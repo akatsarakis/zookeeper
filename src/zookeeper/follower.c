@@ -77,7 +77,7 @@ void *follower(void *arg)
   struct ibv_sge credit_sgl, credit_recv_sgl;
   struct ibv_wc credit_wc[FLR_MAX_CREDIT_RECV];
   struct ibv_recv_wr credit_recv_wr[FLR_MAX_CREDIT_RECV];
-  uint16_t credits[FLR_VC_NUM];
+  uint16_t credits = W_CREDITS;
   uint16_t wn = 0, rm_id = 0, wr_i = 0, br_i = 0, cb_i = 0, coh_message_count[VIRTUAL_CHANNELS][MACHINE_NUM],
     credit_wr_i = 0, op_i = 0, upd_i = 0,	inv_ops_i = 0, update_ops_i = 0, ack_ops_i, coh_buf_i = 0,
     upd_count, send_ack_count, stalled_ops_i, updates_sent, credit_recv_counter = 0, rem_req_i = 0, prev_rem_req_i,
@@ -120,11 +120,11 @@ void *follower(void *arg)
   set_up_mrs(&ops_mr, &w_mr, ops, coh_buf, cb);
   uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
   struct recv_info *prep_recv_info, *com_recv_info;
-  init_recv_info(&prep_recv_info, &prep_push_ptr, FLR_PREP_BUF_SLOTS,
-                 FLR_PREP_RECV_SIZE, FLR_MAX_RECV_PREP_WRS, prep_recv_wr,
+  init_recv_info(&prep_recv_info, prep_push_ptr, FLR_PREP_BUF_SLOTS,
+                 (uint32_t) FLR_PREP_RECV_SIZE, FLR_MAX_RECV_PREP_WRS, prep_recv_wr,
                  cb->dgram_qp[PREP_ACK_QP_ID], prep_recv_sgl, (void*) prep_buffer);
-  init_recv_info(&com_recv_info, &com_push_ptr, FLR_COM_BUF_SLOTS,
-                 FLR_COM_RECV_SIZE, FLR_MAX_RECV_COM_WRS, com_recv_wr,
+  init_recv_info(&com_recv_info, com_push_ptr, FLR_COM_BUF_SLOTS,
+                 (uint32_t) FLR_COM_RECV_SIZE, FLR_MAX_RECV_COM_WRS, com_recv_wr,
                  cb->dgram_qp[COMMIT_W_QP_ID], com_recv_sgl, (void*) com_buffer);
 
   struct pending_writes *p_writes;
@@ -172,13 +172,30 @@ void *follower(void *arg)
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
     poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
-                      prep_recv_wc, prep_recv_info, t_id);
+                      prep_recv_wc, prep_recv_info, t_id, flr_id);
 
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
     send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
-                     prep_recv_info, flr_id,  ack, p_acks, t_id);
+                     prep_recv_info, com_recv_info, flr_id,  ack, p_acks, t_id);
+
+
+
+    /* ---------------------------------------------------------------------------
+    ------------------------------POLL FOR COMMITS---------------------------------
+    ---------------------------------------------------------------------------*/
+
+    poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, cb->dgram_recv_cq[COMMIT_W_QP_ID],
+                  com_recv_wc, com_recv_info, t_id, flr_id);
+
+
+    /* ---------------------------------------------------------------------------
+    ------------------------------PROPAGATE UPDATES---------------------------------
+    ---------------------------------------------------------------------------*/
+    flr_propagate_updates(p_writes, p_acks, resp, t_id);
+
+
   /* ---------------------------------------------------------------------------
   ------------------------------PROBE THE CACHE--------------------------------------
   ---------------------------------------------------------------------------*/

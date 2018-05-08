@@ -282,7 +282,7 @@ void cache_insert_one(struct cache_op *op, struct mica_resp *resp);
  * But writes do not get served, writes are only propagated here to see whether their keys exist */
 void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
 /* The leader sends the writes to be committed with this function*/
-void cache_batch_op_updates(uint32_t , int , struct cache_op **, struct mica_resp *);
+void cache_batch_op_updates(uint32_t , int , struct prepare**, struct mica_resp *,uint32_t,  uint32_t, bool);
 
 // ** OLD STUFF **
 

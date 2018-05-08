@@ -1471,7 +1471,7 @@ static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uin
 		*(uint128 *) &ops[op_i] = trace[trace_iter].key_hash;
     //ops[op_i].key.meta.cid = working_session;
 		ops[op_i].opcode = is_update ? (uint8_t) CACHE_OP_PUT : (uint8_t) CACHE_OP_GET;
-		ops[op_i].val_len = is_update ? (uint8_t) (HERD_VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0; // if it is not an update the val_len will not be included in the packet
+		ops[op_i].val_len = is_update ? (uint8_t) (VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0; // if it is not an update the val_len will not be included in the packet
 		if (is_update) {
       // printf("Thread %d found a write for session %d\n", t_id, working_session);
 			// SET UP the prepare message helpers
@@ -1483,7 +1483,7 @@ static inline uint32_t leader_batch_from_trace_to_cache(uint32_t trace_iter, uin
 
 			struct prepare *tmp_op = (struct prepare*) &ops[op_i];
 			memcpy(&preps[prep_ptr].prepare[inside_prep_ptr].key, &(tmp_op->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
-			p_writes->ptrs_to_ops[w_ptr] = (struct cache_op *)&preps[prep_ptr].prepare[inside_prep_ptr];
+			p_writes->ptrs_to_ops[w_ptr] = &preps[prep_ptr].prepare[inside_prep_ptr];
 			preps[prep_ptr].prepare[inside_prep_ptr].flr_id = FOLLOWER_MACHINE_NUM; //means it's a leader message
 			if (inside_prep_ptr == 0) {
 				p_writes->prep_fifo->backward_ptrs[prep_ptr] = w_ptr;
@@ -1546,13 +1546,15 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 	int i;
 	for (i = 0; i < unordered_writes_num; ++i) {
 //		if (ENABLE_ASSERTIONS) assert(p_writes->g_id[i] == 0); //TODO is this needed?
-		p_writes->g_id[i] = id + i;
-		struct prepare *prep = (struct prepare*) p_writes->ptrs_to_ops[i];
-		memcpy(prep->g_id, &p_writes->g_id[i], 4);
+    uint16_t unordered_ptr =  (LEADER_PENDING_WRITES + p_writes->push_ptr - unordered_writes_num + i)
+                              % LEADER_PENDING_WRITES;
+		p_writes->g_id[unordered_ptr] = id + i;
+		struct prepare *prep = (struct prepare*) p_writes->ptrs_to_ops[unordered_ptr];
+		memcpy(prep->g_id, &p_writes->g_id[unordered_ptr], 4);
 	}
-  if (unordered_writes_num > 0)
-    printf("Thread %d got id %lu to id %lu for its write for %u writes \n",
-           t_id,  id, id + unordered_writes_num - 1,  unordered_writes_num);
+//  if (unordered_writes_num > 0)
+//    printf("Thread %d got id %lu to id %lu for its write for %u writes \n",
+//           t_id,  id, id + unordered_writes_num - 1,  unordered_writes_num);
 	if (ENABLE_ASSERTIONS)
 		assert((p_writes->unordered_ptr + unordered_writes_num) % LEADER_PENDING_WRITES == p_writes->push_ptr);
 	p_writes->unordered_ptr = p_writes->push_ptr;
@@ -1576,10 +1578,12 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 	while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
 		struct ack_message *ack = &incoming_acks[index].ack;
 		uint16_t ack_num = ack->ack_num;
-		MOD_ADD_WITH_BASE(index, LEADER_ACK_BUF_SLOTS, 0);
+		MOD_ADD(index, LEADER_ACK_BUF_SLOTS);
 		polled_messages++;
 		credits[PREP_VC][ack->follower_id] += ack_num; // increase credits
+		credits[COMM_VC][ack->follower_id] += ack_num;
     if (credits[PREP_VC][ack->follower_id] > PREPARE_CREDITS) credits[PREP_VC][ack->follower_id] = PREPARE_CREDITS;
+		if (credits[COMM_VC][ack->follower_id] > COMMIT_CREDITS) credits[COMM_VC][ack->follower_id] = COMMIT_CREDITS;
 		// if the pending write FIFO is empty it means the acks are for committed messages.
 		if (p_writes->size == 0) { memset(ack, 0, FLR_ACK_SEND_SIZE); continue; }
 		if (ENABLE_ASSERTIONS) {
@@ -1591,8 +1595,8 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 		uint64_t l_id = *(uint64_t *) (ack->local_id);
 		uint64_t pull_lid = p_writes->local_w_id; // l_id at the pull pointer
 		uint16_t ack_ptr; // a pointer in the FIFO, from where ack should be added
-    yellow_printf("Leader %d ack opcode %d with %d acks for l_id %lu, expected lid %lu, at offset %d at address %u \n",
-                  t_id, ack->opcode, ack_num, l_id, pull_lid, index, &(incoming_acks[index]));
+//    yellow_printf("Leader %d ack opcode %d with %d acks for l_id %lu, oldest lid %lu, at offset %d at address %u \n",
+//                  t_id, ack->opcode, ack_num, l_id, pull_lid, index, &(incoming_acks[index]));
 		if (ENABLE_ASSERTIONS) assert(l_id + ack_num <= pull_lid + p_writes->size);
 		if (pull_lid >= l_id) {
 			ack_num -= (pull_lid - l_id);
@@ -1604,7 +1608,8 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 		for (uint16_t ack_i = 0; ack_i < ack_num; ack_i++) {
 			p_writes->acks_seen[ack_ptr]++;
 			if (p_writes->acks_seen[ack_ptr] == LDR_QUORUM_OF_ACKS) {
-        printf("Leader %d write at ptr %d is ready\n", t_id, ack_ptr);
+//        printf("Leader %d valid ack %u/%u write at ptr %d with g_id %lu is ready \n",
+//               t_id, ack_i, ack_num,  ack_ptr, p_writes->g_id[ack_ptr]);
         p_writes->w_state[ack_ptr] = READY;
       }
 			MOD_ADD(ack_ptr, LEADER_PENDING_WRITES);
@@ -1655,7 +1660,7 @@ static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t l
 	}
 }
 
-// Propagate Updates that have seen all acks to the KVS
+// Leader propagates Updates that have seen all acks to the KVS
 static inline void propagate_updates(struct pending_writes *p_writes,
 																		 struct commit_fifo *com_fifo, struct mica_resp *resp, uint16_t t_id)
 {
@@ -1668,10 +1673,16 @@ static inline void propagate_updates(struct pending_writes *p_writes,
 	while(p_writes->w_state[p_writes->pull_ptr] == READY) {
 		if (com_fifo->size == COMMIT_FIFO_SIZE) break; // the commit prep_message is full TODO that is not strictly speaking correct
 		if (p_writes->g_id[p_writes->pull_ptr] != committed_g_id + 1) break;
-    printf("Leader found updates to propagate\n");
+//    printf("Leader found updates to propagate\n");
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
+    p_writes->acks_seen[p_writes->pull_ptr] = 0;
+    uint32_t prep_fifo_pull_ptr = p_writes->prep_fifo->pull_ptr;
+    if (p_writes->prep_fifo->backward_ptrs[prep_fifo_pull_ptr] == p_writes->pull_ptr) {
+      p_writes->prep_fifo->size--;
+      MOD_ADD(p_writes->prep_fifo->pull_ptr, PREP_FIFO_SIZE);
+    }
 		if (p_writes->is_local[p_writes->pull_ptr]) {
-			p_writes->session_has_pending_write[p_writes->pull_ptr] = false;
+			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;
 		}
@@ -1685,9 +1696,9 @@ static inline void propagate_updates(struct pending_writes *p_writes,
 		p_writes->local_w_id += update_op_i; // advance the local_w_id
     if (ENABLE_ASSERTIONS) assert(p_writes->size >= update_op_i);
     p_writes->size -= update_op_i;
-		struct cache_op * tmp_ptr = p_writes->ptrs_to_ops[pull_ptr];
-		cache_batch_op_updates((uint32_t) update_op_i, 0, &tmp_ptr, resp);
+		cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, LEADER_PENDING_WRITES, false);
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+//    yellow_printf("Committed global id %lu \n", committed_g_id);
 	}
 }
 
@@ -1759,8 +1770,9 @@ static inline void post_recvs_with_recv_info(struct recv_info *recv, uint32_t re
 	uint16_t j;
 	struct ibv_recv_wr *bad_recv_wr;
 	for (j = 0; j < recv_num; j++) {
-		recv->recv_sgl[j].addr = (uintptr_t) recv->buf + ((*recv->push_ptr) * recv->slot_size);
-		MOD_ADD(*recv->push_ptr, recv->buf_slots);
+		recv->recv_sgl[j].addr = (uintptr_t) recv->buf + (recv->push_ptr * recv->slot_size);
+//    printf("Posting a receive at push ptr %u at address %lu \n", recv->push_ptr, recv->recv_sgl[j].addr);
+		MOD_ADD(recv->push_ptr, recv->buf_slots);
 		recv->recv_wr[j].next = (j == recv_num - 1) ?
 											NULL : &recv->recv_wr[j + 1];
 	}
@@ -1800,8 +1812,8 @@ static inline bool check_bcast_credits(uint16_t credits[][FOLLOWER_MACHINE_NUM],
       break;
     }
   }
-  // There are no explicit credit messages for the prepare phase
-  if (vc == PREP_VC) return !poll_for_credits;
+  // There are no explicit credit messages
+  return !poll_for_credits;
 
   if (poll_for_credits)
     ldr_poll_credits(cb->dgram_recv_cq[FC_QP_ID], credit_wc, credits, protocol);
@@ -1913,6 +1925,7 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
 				posted_w_recvs += recvs_to_post_num;
 			}
       post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
+			com_send_wr[0].send_flags = COM_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
       br_i = 0;
     }
   }
@@ -1923,6 +1936,7 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
 			posted_w_recvs += recvs_to_post_num;
 		}
 		post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
+		com_send_wr[0].send_flags = COM_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
 	}
 	if (ENABLE_ASSERTIONS) assert(posted_w_recvs <= LDR_MAX_RECV_W_WRS);
 	w_recv_info->posted_recvs = posted_w_recvs;
@@ -2005,12 +2019,15 @@ static inline void forge_prep_wr(uint16_t prep_i, struct pending_writes *p_write
 		p_writes->w_state[(backward_ptr + i) % LEADER_PENDING_WRITES] = SENT;
 	send_sgl[br_i].length = PREP_MES_HEADER + coalesce_num * sizeof(struct prepare);
 	send_sgl[br_i].addr = (uint64_t) (uintptr_t) prep;
+
 	green_printf("Leader %d : I BROADCAST a prepare message %d of %u prepares with  credits: %d, lid: %u  \n",
 							 t_id, prep->opcode, coalesce_num, credits[vc][0],  *(uint32_t*)prep->l_id);
 	// Do a Signaled Send every PREP_BCAST_SS_BATCH broadcasts (PREP_BCAST_SS_BATCH * (MACHINE_NUM - 1) messages)
 	if ((*prep_br_tx) % PREP_BCAST_SS_BATCH == 0) send_wr[0].send_flags |= IBV_SEND_SIGNALED;
+//  else
 	(*prep_br_tx)++;
 	if ((*prep_br_tx) % PREP_BCAST_SS_BATCH == PREP_BCAST_SS_BATCH - 1) {
+    printf("Leader %u POLLING for a send completion in prepares \n", t_id);
 		hrd_poll_cq(cb->dgram_send_cq[PREP_ACK_QP_ID], 1, &signal_send_wc);
 	}
 	// Have the last message of each broadcast pointing to the first message of the next bcast
@@ -2036,7 +2053,7 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 	while (p_writes->prep_fifo->bcast_size > 0) {
 
 		// Check if there are enough credits for a Broadcast
-    printf("LDR %d has %u bcasts to send credits %d\n",t_id, p_writes->prep_fifo->bcast_size, credits[PREP_VC][0]);
+//    printf("LDR %d has %u bcasts to send credits %d\n",t_id, p_writes->prep_fifo->bcast_size, credits[PREP_VC][0]);
 
 		if (!check_bcast_credits(credits, cb, credit_wc, credit_debug_cnt, vc, protocol))
 			break;
@@ -2058,6 +2075,7 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 			}
 			post_recvs_and_batch_bcasts_to_NIC(br_i, cb, prep_send_wr, NULL, &credit_recv_counter, PREP_ACK_QP_ID);
 			br_i = 0;
+			prep_send_wr[0].send_flags = LEADER_PREPARE_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
 		}
 	}
   if (br_i > 0) {
@@ -2068,6 +2086,7 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
       posted_recvs += recvs_to_post_num;
     }
     post_recvs_and_batch_bcasts_to_NIC(br_i, cb, prep_send_wr, NULL, &credit_recv_counter, PREP_ACK_QP_ID);
+		prep_send_wr[0].send_flags = LEADER_PREPARE_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
   }
 	p_writes->prep_fifo->bcast_pull_ptr = bcast_pull_ptr;
 	ack_recv_info->posted_recvs = posted_recvs;
@@ -2083,12 +2102,13 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps, uint32_t *pull_ptr,
 																		 struct pending_writes *p_writes, struct pending_acks *p_acks,
 																		 struct ibv_cq * prep_recv_cq, struct ibv_wc *prep_recv_wc,
-																		 struct recv_info *prep_recv_info, uint16_t t_id)
+																		 struct recv_info *prep_recv_info, uint16_t t_id, uint8_t flr_id)
 {
 	uint16_t polled_messages = 0;
 	if (p_writes->size == FLR_PENDING_WRITES) return;
 	uint32_t index = *pull_ptr;
-	while(incoming_preps[index].prepare.opcode == CACHE_OP_PUT) {
+//  if (t_id == 0) printf("index %u \n", index);
+	while(incoming_preps[index].prepare.opcode == CACHE_OP_PUT && p_writes->size < FLR_PENDING_WRITES) {
 		struct prep_message *prep_mes = &incoming_preps[index].prepare;
 		uint8_t coalesce_num = prep_mes->coalesce_num;
 		struct prepare *prepare = prep_mes->prepare;
@@ -2096,8 +2116,8 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 
 		uint32_t incoming_l_id = *(uint32_t *)prep_mes->l_id;
 		uint64_t expected_l_id = p_writes->local_w_id + p_writes->size;
-    printf("Flr %d sees a write message with %d prepares, l_id %u, expected lid %lu \n",
-           t_id, coalesce_num, incoming_l_id, expected_l_id);
+//    printf("Flr %d sees a write message with %d prepares at index %u l_id %u, expected lid %lu \n",
+//           t_id, coalesce_num, index, incoming_l_id, expected_l_id);
 		if (FLR_DISALLOW_OUT_OF_ORDER_PREPARES) assert(expected_l_id == (uint64_t) incoming_l_id);
 		if (ENABLE_ASSERTIONS) assert(expected_l_id <= (uint64_t) incoming_l_id);
 
@@ -2114,11 +2134,22 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 		while (prepare[coalesce_num - 1].opcode == 0);
 		for (uint8_t prep_i = 0; prep_i < coalesce_num; prep_i++) {
 			uint32_t push_ptr = (p_writes->push_ptr + extra_slots) % FLR_PENDING_WRITES;
-			if (ENABLE_ASSERTIONS) assert(p_writes->w_state[push_ptr] == INVALID);
-			p_writes->ptrs_to_ops[push_ptr] = (struct cache_op *) &prepare[prep_i];
+			p_writes->ptrs_to_ops[push_ptr] = &prepare[prep_i];
 			memcpy(&p_writes->g_id[push_ptr], prepare[prep_i].g_id, sizeof(uint32_t));
-			memcpy(&p_writes->session_id[push_ptr],prepare[prep_i].session_id, 3 * sizeof(uint8_t));
 			p_writes->flr_id[push_ptr] = prepare[prep_i].flr_id;
+			assert(p_writes->flr_id[push_ptr] ==  FOLLOWER_MACHINE_NUM);
+			green_printf("Flr %u, new write at ptr %u with g_id %lu and flr id %u  \n",
+									 t_id, push_ptr, p_writes->g_id[push_ptr], p_writes->flr_id[push_ptr]);
+			if (ENABLE_ASSERTIONS) {
+				assert(prepare[prep_i].val_len == VALUE_SIZE >> SHIFT_BITS);
+				assert(p_writes->w_state[push_ptr] == INVALID);
+			}
+			// if the req originates from this follower
+			if (prepare[prep_i].flr_id == flr_id)  {
+				p_writes->is_local[push_ptr] = true;
+				memcpy(&p_writes->session_id[push_ptr], prepare[prep_i].session_id, 3 * sizeof(uint8_t));
+			}
+			else p_writes->is_local[push_ptr] = false;
 			p_writes->w_state[push_ptr] = VALID;
 			if (extra_slots == 0) { // FIFO style insert
 				MOD_ADD(p_writes->push_ptr, FLR_PENDING_WRITES);
@@ -2133,6 +2164,7 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 			p_writes->size++;
 			p_acks->acks_to_send++;
 		}
+		incoming_preps[index].prepare.opcode = 0;
 		MOD_ADD(index, FLR_PREP_BUF_SLOTS);
 		polled_messages++;
 	}
@@ -2148,6 +2180,7 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 static inline void send_acks_to_ldr(struct pending_writes *p_writes, struct ibv_send_wr *ack_send_wr,
 																		struct ibv_sge *ack_send_sgl, long long *sent_ack_tx,
 																		struct hrd_ctrl_blk *cb, struct recv_info *prep_recv_info,
+																		struct recv_info *com_recv_info,
 																		uint8_t flr_id, struct ack_message *ack,
 																		struct pending_acks *p_acks, uint16_t t_id)
 {
@@ -2166,8 +2199,8 @@ static inline void send_acks_to_ldr(struct pending_writes *p_writes, struct ibv_
 	p_acks->slots_ahead += p_acks->acks_to_send;
 	p_acks->acks_to_send = 0;
 	ack_send_sgl->addr = (uint64_t) (uintptr_t) ack;
-  yellow_printf("Flr %d is sending an ack for lid %lu and ack num %d and flr id %d \n",
-                t_id, l_id_to_send, ack->ack_num, ack->follower_id);
+//  yellow_printf("Flr %d is sending an ack for lid %lu and ack num %d and flr id %d, p_writes size %u/%d \n",
+//                t_id, l_id_to_send, ack->ack_num, ack->follower_id, p_writes->size, FLR_PENDING_WRITES);
   if (ENABLE_ASSERTIONS) assert(ack->ack_num > 0);
 	if ((*sent_ack_tx) % ACK_SEND_SS_BATCH == 0) {
 		ack_send_wr->send_flags |= IBV_SEND_SIGNALED;
@@ -2184,13 +2217,112 @@ static inline void send_acks_to_ldr(struct pending_writes *p_writes, struct ibv_
 	// RECEIVES for prepares
 	uint32_t posted_recvs = prep_recv_info->posted_recvs;
 	uint32_t recvs_to_post_num = MIN((FLR_MAX_RECV_PREP_WRS - posted_recvs), send_ack_count);
-	if (recvs_to_post_num > 0)
-		post_recvs_with_recv_info(prep_recv_info, recvs_to_post_num);
-	prep_recv_info->posted_recvs+= recvs_to_post_num;
+	if (recvs_to_post_num > 0) {
+    post_recvs_with_recv_info(prep_recv_info, recvs_to_post_num);
+    prep_recv_info->posted_recvs += recvs_to_post_num;
+    printf("FLR %d posting %u recvs and has a total of %u recvs for prepares \n",
+           t_id, recvs_to_post_num,  prep_recv_info->posted_recvs);
+  }
 	if (ENABLE_ASSERTIONS) assert(recvs_to_post_num <= FLR_MAX_RECV_PREP_WRS);
+	// RECEIVES FOR COMMITS
+	posted_recvs = com_recv_info->posted_recvs;
+	recvs_to_post_num = MIN((FLR_MAX_RECV_COM_WRS - posted_recvs), send_ack_count);
+	if (recvs_to_post_num > 0) {
+		post_recvs_with_recv_info(com_recv_info, recvs_to_post_num);
+		com_recv_info->posted_recvs += recvs_to_post_num;
+		printf("FLR %d posting %u recvs and has a total of %u recvs for commits \n",
+					 t_id, recvs_to_post_num,  com_recv_info->posted_recvs);
+	}
+	if (ENABLE_ASSERTIONS) assert(recvs_to_post_num <= FLR_MAX_RECV_COM_WRS);
+
 	// SEND the ack
 	int ret = ibv_post_send(cb->dgram_qp[PREP_ACK_QP_ID], &ack_send_wr[0], &bad_send_wr);
 	CPE(ret, "ACK ibv_post_send error", ret);
+}
+
+
+// Leader polls for acks
+static inline void poll_for_coms(struct com_message_ud_req *incoming_coms, uint32_t *pull_ptr,
+                                 struct pending_writes *p_writes, uint16_t *credits,
+                                 struct ibv_cq * com_recv_cq, struct ibv_wc *com_recv_wc,
+                                 struct recv_info *com_recv_info, uint16_t t_id, uint8_t flr_id)
+{
+  uint32_t index = *pull_ptr;
+  uint32_t polled_messages = 0;
+  while (incoming_coms[index].com.opcode == CACHE_OP_PUT) {
+    struct com_message *com = &incoming_coms[index].com;
+    uint16_t com_num = com->com_num;
+    // spin until the entire message is there
+//		while ((*(uint64_t *) (com->local_id)) == 0); // TODO this is problematic because lids start from 0
+    uint64_t l_id = *(uint64_t *) (com->l_id);
+    uint64_t pull_lid = p_writes->local_w_id; // l_id at the pull pointer
+    uint16_t com_ptr; // a pointer in the FIFO, where the committed write lives
+    yellow_printf("Flr %d com opcode %d with %d coms for l_id %lu, oldest lid %lu, at offset %d at address %u \n",
+                  t_id, com->opcode, com_num, l_id, pull_lid, index, &(incoming_coms[index]));
+    if (ENABLE_ASSERTIONS) {
+			assert(l_id + com_num <= pull_lid + p_writes->size);
+			assert(pull_lid <= l_id);
+		}
+    // This must always hold: l_id >= pull_lid
+		com_ptr = (p_writes->pull_ptr + (l_id - pull_lid)) % FLR_PENDING_WRITES;
+    for (uint16_t com_i = 0; com_i < com_num; com_i++) {
+      if (ENABLE_ASSERTIONS) assert(p_writes->w_state[com_ptr] == VALID);
+      printf("Flr %d valid com %u/%u write at ptr %d with g_id %lu is ready \n",
+               t_id, com_i, com_num,  com_ptr, p_writes->g_id[com_ptr]);
+			p_writes->w_state[com_ptr] = READY;
+			if (p_writes->flr_id[com_ptr] == flr_id) {assert(false);(*credits)++;}
+      MOD_ADD(com_ptr, FLR_PENDING_WRITES);
+    }
+    if (ENABLE_ASSERTIONS) assert(*credits <= W_CREDITS);
+    memset(com, 0, LDR_COM_SEND_SIZE); // need to delete all the g_ids
+		MOD_ADD(index, FLR_COM_BUF_SLOTS);
+		polled_messages++;
+  } // while
+
+  *pull_ptr = index;
+  // Poll for the completion of the receives
+  if (polled_messages > 0) hrd_poll_cq(com_recv_cq, polled_messages, com_recv_wc);
+  if (ENABLE_ASSERTIONS) assert(com_recv_info->posted_recvs >= polled_messages);
+  com_recv_info->posted_recvs -= polled_messages;
+}
+
+
+// Folllower propagate sUpdates that have seen all acks to the KVS
+static inline void flr_propagate_updates(struct pending_writes *p_writes, struct pending_acks *p_acks,
+																		  struct mica_resp *resp, uint16_t t_id)
+{
+//  printf("Ldr %d propagating updates \n", t_id);
+	uint16_t update_op_i = 0;
+	uint32_t pull_ptr = p_writes->pull_ptr;
+
+	// Read the latest committed g_id
+	uint64_t committed_g_id = atomic_load_explicit(&committed_global_w_id, memory_order_relaxed);
+	while(p_writes->w_state[p_writes->pull_ptr] == READY) {
+		if (p_writes->g_id[p_writes->pull_ptr] != committed_g_id + 1) break;
+//    printf("Follower found updates to propagate\n");
+		p_writes->w_state[p_writes->pull_ptr] = INVALID;
+		if (p_writes->is_local[p_writes->pull_ptr]) {
+			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
+			p_writes->all_sessions_stalled = false;
+			p_writes->is_local[p_writes->pull_ptr] = false;
+		}
+		MOD_ADD(p_writes->pull_ptr, FLR_PENDING_WRITES);
+		update_op_i++;
+		committed_g_id++;
+	}
+	if (update_op_i > 0) {
+		p_writes->local_w_id += update_op_i; // advance the local_w_id
+		if (ENABLE_ASSERTIONS) {
+			assert(p_writes->size >= update_op_i);
+			assert(p_acks->slots_ahead >= update_op_i);
+		}
+		p_acks->slots_ahead -= update_op_i;
+		p_writes->size -= update_op_i;
+//		struct cache_op * tmp_ptr = p_writes->ptrs_to_ops[pull_ptr];
+		cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, FLR_PENDING_WRITES, true);
+		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+		yellow_printf("Committed global id %lu \n", committed_g_id);
+	}
 }
 
 //

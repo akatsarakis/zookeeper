@@ -153,7 +153,7 @@ void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, s
 // construct a prep_message-- max_size must be in bytes
 void init_fifo(struct fifo **fifo, uint32_t max_size);
 // Set up the receive info
-void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_slots,
+void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slots,
                     uint32_t slot_size, uint32_t, struct ibv_recv_wr *recv_wr,
                     struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf);
 

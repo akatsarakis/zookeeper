@@ -364,7 +364,11 @@ inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op
 }
 
 /* The leader sends the writes to be committed with this function*/
-inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_op **op, struct mica_resp *resp)
+// THE API IS DIFFERENT HERE, THIS TAKES AN ARRAY OF POINTERS RATHER THAN A POINTER TO AN ARRAY
+// YOU have to give a pointer to the beggining of the array of the pointers or else you will not
+// be able to wrap around to your array
+inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct prepare **preps,
+                                   struct mica_resp *resp, uint32_t pull_ptr,  uint32_t max_op_size, bool zero_ops)
 {
   int I, j;	/* I is batch index */
   long long stalled_brces = 0;
@@ -390,14 +394,14 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
      * for both GETs and PUTs.
      */
   for(I = 0; I < op_num; I++) {
-    bkt[I] = (*op)[I].key.bkt & cache.hash_table.bkt_mask;
+    struct cache_op *op = (struct cache_op*) preps[(pull_ptr + I) % max_op_size];
+    bkt[I] = op->key.bkt & cache.hash_table.bkt_mask;
     bkt_ptr[I] = &cache.hash_table.ht_index[bkt[I]];
     __builtin_prefetch(bkt_ptr[I], 0, 0);
-    tag[I] = (*op)[I].key.tag;
+    tag[I] = op->key.tag;
 
     key_in_store[I] = 0;
     kv_ptr[I] = NULL;  }
-
   for(I = 0; I < op_num; I++) {
     for(j = 0; j < 8; j++) {
       if(bkt_ptr[I]->slots[j].in_use == 1 &&
@@ -425,23 +429,25 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
   }
   // the following variables used to validate atomicity between a lock-free read of an object
   for(I = 0; I < op_num; I++) {
+    struct cache_op *op = (struct cache_op*) preps[(pull_ptr + I) % max_op_size];
     if(kv_ptr[I] != NULL) {
       /* We had a tag match earlier. Now compare log entry. */
       long long *key_ptr_log = (long long *) kv_ptr[I];
-      long long *key_ptr_req = (long long *) &(*op)[I];
+      long long *key_ptr_req = (long long *) op;
       if(key_ptr_log[1] == key_ptr_req[1]) { //Cache Hit
         key_in_store[I] = 1;
-        if ((*op)[I].opcode == CACHE_OP_PUT) {
-          if (ENABLE_ASSERTIONS) assert((*op)[I].val_len == kv_ptr[I]->val_len);
+        if (op->opcode == CACHE_OP_PUT) {
+          red_printf("op val len %d in ptr %d, total ops %d \n",op->val_len, (pull_ptr + I) % max_op_size, op_num );
+          if (ENABLE_ASSERTIONS) assert(op->val_len == kv_ptr[I]->val_len);
           optik_lock(&kv_ptr[I]->key.meta);
-          memcpy(kv_ptr[I]->value, (*op)[I].value, kv_ptr[I]->val_len);
-          optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id,(uint32_t*) &(*op)[I].key.meta.version);
+          memcpy(kv_ptr[I]->value, op->value, kv_ptr[I]->val_len);
+          optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id,(uint32_t*) &op->key.meta.version);
           resp[I].val_len = 0;
           resp[I].val_ptr = NULL;
           resp[I].type = CACHE_PUT_SUCCESS;
         }
         else {
-          red_printf("wrong Opcode in cache: %d, req %d \n", (*op)[I].opcode, I);
+          red_printf("wrong Opcode in cache: %d, req %d \n", op->opcode, I);
           assert(0);
         }
       }
@@ -451,7 +457,12 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct cache_
       resp[I].val_ptr = NULL;
       resp[I].type = CACHE_MISS;
     }
+    if (zero_ops) {
+//      printf("Zero out %d at address %lu \n", op->opcode, &op->opcode);
+      op->opcode = 0;
+    }
   }
+
 }
 
 

@@ -259,7 +259,7 @@ void mica_batch_op(struct mica_kv *kv,
 					resp[I].val_len = 0;
 					resp[I].val_ptr = NULL;
 				} else {
-					printf("Wrong opcode %d \n", (*op)[I].opcode);
+					printf("Wrong opcode %d \n", op[I]->opcode);
 					assert(0);
 				}
 			}

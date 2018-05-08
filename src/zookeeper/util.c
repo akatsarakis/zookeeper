@@ -985,7 +985,7 @@ void init_fifo(struct fifo **fifo, uint32_t max_size)
 
 
 // Set up the receive info
-void init_recv_info(struct recv_info **recv, uint32_t *push_ptr, uint32_t buf_slots,
+void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slots,
                     uint32_t slot_size, uint32_t posted_recvs, struct ibv_recv_wr *recv_wr,
                     struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf)
 {
@@ -1015,7 +1015,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
     (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
     (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
     (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
-    (*p_writes)->ptrs_to_ops = (struct cache_op**) malloc(size * sizeof(struct cache_op*));
+    (*p_writes)->ptrs_to_ops = (struct prepare**) malloc(size * sizeof(struct prepare*));
 
     memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
     (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
@@ -1028,10 +1028,9 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
     //  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
     //  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
     memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
-    for (i = 0; i < SESSIONS_PER_THREAD; i++)
-    (*p_writes)->session_has_pending_write[i] = false;
+    for (i = 0; i < SESSIONS_PER_THREAD; i++) (*p_writes)->session_has_pending_write[i] = false;
     for (i = 0; i < size; i++) {
-    (*p_writes)->w_state[i] = INVALID;
+      (*p_writes)->w_state[i] = INVALID;
     }
     struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
     for (i = 0; i < PREP_FIFO_SIZE; i++) {
@@ -1166,7 +1165,7 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
   //BROADCAST WRs and credit Receives
   for (j = 0; j < MAX_BCAST_BATCH; j++) { // Number of Broadcasts
     //prep_send_sgl[j].addr = (uint64_t) (uintptr_t) (buf + j);
-    if (LEADER_ENABLE_INLINING == 0) prep_send_sgl[j].lkey = prep_mr->lkey;
+    if (LEADER_PREPARE_ENABLE_INLINING == 0) prep_send_sgl[j].lkey = prep_mr->lkey;
     if (!COM_ENABLE_INLINING) com_send_sgl[j].lkey = com_mr->lkey;
     for (i = 0; i < MESSAGES_IN_BCAST; i++) {
       uint16_t rm_id = i;
@@ -1191,7 +1190,7 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
       com_send_wr[index].opcode = IBV_WR_SEND;
       com_send_wr[index].num_sge = 1;
       com_send_wr[index].sg_list = &com_send_sgl[j];
-      if (LEADER_ENABLE_INLINING == 1) prep_send_wr[index].send_flags = IBV_SEND_INLINE;
+      if (LEADER_PREPARE_ENABLE_INLINING == 1) prep_send_wr[index].send_flags = IBV_SEND_INLINE;
       if (COM_ENABLE_INLINING == 1) com_send_wr[index].send_flags = IBV_SEND_INLINE;
       prep_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &prep_send_wr[index + 1];
       com_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &com_send_wr[index + 1];

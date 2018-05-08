@@ -88,11 +88,13 @@ void *leader(void *arg)
   long long credit_tx = 0, prep_br_tx = 0, commit_br_tx = 0;
 
   struct recv_info *w_recv_info, *ack_recv_info;
-  init_recv_info(&w_recv_info, &w_buf_push_ptr, LEADER_W_BUF_SLOTS,
-                 LDR_W_RECV_SIZE, LDR_MAX_RECV_W_WRS, w_recv_wr, cb->dgram_qp[COMMIT_W_QP_ID], w_recv_sgl, (void*) w_buffer);
+  init_recv_info(&w_recv_info, w_buf_push_ptr, LEADER_W_BUF_SLOTS,
+                 (uint32_t)LDR_W_RECV_SIZE, LDR_MAX_RECV_W_WRS, w_recv_wr, cb->dgram_qp[COMMIT_W_QP_ID],
+                 w_recv_sgl, (void*) w_buffer);
 
-  init_recv_info(&ack_recv_info, &ack_buf_push_ptr, LEADER_ACK_BUF_SLOTS,
-                 LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl, (void*) ack_buffer);
+  init_recv_info(&ack_recv_info, ack_buf_push_ptr, LEADER_ACK_BUF_SLOTS,
+                 (uint32_t)LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl,
+                 (void*) ack_buffer);
   printf("Leader creates recv info\n");
 
 

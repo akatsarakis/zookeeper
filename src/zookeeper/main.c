@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
                 sizeof(struct prep_message), LDR_PREP_SEND_SIZE,
                 sizeof(struct prep_message_ud_req), FLR_PREP_RECV_SIZE);
 
-
+  green_printf("LEADER PREPARE INLINING %d \n", LEADER_PREPARE_ENABLE_INLINING);
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
