@@ -25,14 +25,15 @@ void *leader(void *arg)
 												0, -1, /* port_index, numa_node_id */
 												0, 0,	/* #conn qps, uc */
 												NULL, 0, -1,	/* prealloc conn buf, buf size, key */
-												LEADER_QP_NUM, UD_REQ_SIZE + LEADER_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
+												LEADER_QP_NUM, LEADER_BUF_SIZE,	/* num_dgram_qps, dgram_buf_size */
 												MASTER_SHM_KEY + t_id, /* key */
 												recv_q_depths, send_q_depths); /* Depth of the dgram RECV Q*/
 
   uint32_t ack_buf_push_ptr = 0, ack_buf_pull_ptr = 0;
   uint32_t w_buf_push_ptr = 0, w_buf_pull_ptr = 0;
-  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE); // leave a slot for the credits
-  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + UD_REQ_SIZE + LEADER_ACK_BUF_SIZE);
+  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf); // leave a slot for the credits
+  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+//  if (t_id == 0) printf("ack buffer starts at %llu, w buffer starts at %llu\n", ack_buffer, w_buffer);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
 	---------------------------------------------------------------------------*/
@@ -83,7 +84,7 @@ void *leader(void *arg)
     coh_message_count[LDR_VC_NUM][MACHINE_NUM], coh_buf_i = 0,
 			ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
 			acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
-	uint32_t cmd_count = 0, credit_debug_cnt = 0;
+	uint32_t cmd_count = 0;
 	uint32_t trace_iter = 0;
   long long credit_tx = 0, prep_br_tx = 0, commit_br_tx = 0;
 
@@ -136,6 +137,12 @@ void *leader(void *arg)
   void * prep_buf = (void *) p_writes->prep_fifo->prep_message;
   set_up_ldr_mrs(&prep_mr, prep_buf, &com_mr, (void *)com_fifo->commits, cb);
 
+  // There are no explicit credits and therefore we need to represent the remote prepare buffer somehow,
+  // such that we can interpret the incoming acks correctly
+  struct fifo *remote_prep_buf;
+  init_fifo(&remote_prep_buf, FLR_PREP_BUF_SLOTS * sizeof(uint32_t), FOLLOWER_MACHINE_NUM);
+  uint32_t *fifo = (uint32_t *)remote_prep_buf->fifo;
+  assert(fifo[FLR_PREP_BUF_SLOTS -1] == 0);
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
 		---------------------------------------------------------------------------*/
@@ -155,7 +162,9 @@ void *leader(void *arg)
 	------------------------------LATENCY AND DEBUG-----------------------------------
 	---------------------------------------------------------------------------*/
 	uint32_t stalled_counter = 0;
-  uint32_t wait_for_gid_dbg_counter = 0;
+  uint32_t wait_for_gid_dbg_counter = 0, wait_for_acks_dbg_counter = 0;
+  uint32_t credit_debug_cnt[LDR_VC_NUM] = {0};
+  uint32_t outstanding_prepares = 0;
 	uint8_t stalled = 0, debug_polling = 0;
 	struct timespec start, end;
 	uint16_t debug_ptr = 0;
@@ -166,16 +175,10 @@ void *leader(void *arg)
 	---------------------------------------------------------------------------*/
 	while(true) {
 //
-		if (unlikely(wait_for_gid_dbg_counter > M_128)) {
-			red_printf("Leader %d waits for the g_id \n", t_id);
-      wait_for_gid_dbg_counter = 0;
-		}
 
-//    assert(p_writes->size <= SESSIONS_PER_THREAD);
-//    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
-//      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
-//      assert (p_writes->w_state[ptr] == INVALID);
-//    }
+     if (ENABLE_ASSERTIONS)
+       ldr_check_debug_cntrs(credit_debug_cnt, &wait_for_acks_dbg_counter,
+                             &wait_for_gid_dbg_counter, t_id);
 
 		/* ---------------------------------------------------------------------------
 		------------------------------ POLL FOR ACKS--------------------------------
@@ -183,7 +186,8 @@ void *leader(void *arg)
     if (WRITE_RATIO > 0)
       poll_for_acks(ack_buffer, &ack_buf_pull_ptr, p_writes,
                     credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc, ack_recv_info,
-                    t_id);
+                    remote_prep_buf,
+                    t_id, &wait_for_acks_dbg_counter, &outstanding_prepares);
 
 
 
@@ -205,7 +209,7 @@ void *leader(void *arg)
 		---------------------------------------------------------------------------*/
     if (WRITE_RATIO > 0)
       broadcast_commits(credits, cb, com_fifo,
-                        &commit_br_tx, &credit_debug_cnt, credit_wc,
+                        &commit_br_tx, credit_debug_cnt, credit_wc,
                         com_send_sgl, com_send_wr, credit_recv_wr,
                         w_recv_info, t_id);
 
@@ -248,8 +252,10 @@ void *leader(void *arg)
 		if (WRITE_RATIO > 0 )
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
-      broadcast_prepares(p_writes, credits, cb, credit_wc, &credit_debug_cnt,
-                         prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info, t_id);
+      broadcast_prepares(p_writes, credits, cb, credit_wc, credit_debug_cnt,
+                         prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info,
+                         remote_prep_buf, t_id,
+                         &outstanding_prepares);
 
     assert(p_writes->size <= SESSIONS_PER_THREAD);
     for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {

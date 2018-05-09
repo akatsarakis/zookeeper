@@ -75,7 +75,7 @@
 #define FOLLOWER 1
 #define LEADER 2
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 10
+#define SESSIONS_PER_THREAD 60
 
 
 /*-------------------------------------------------
@@ -292,7 +292,7 @@
 #define FLR_PREPARE_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 9
+#define MAX_PREP_COALESCE 3
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
@@ -304,7 +304,7 @@
 //---------LEADER-----------------------
 // PREP_ACK_QP_ID 0: send Prepares -- receive ACKs
 #define LDR_MAX_PREP_WRS (MESSAGES_IN_BCAST_BATCH)
-#define LDR_MAX_RECV_ACK_WRS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
+#define LDR_MAX_RECV_ACK_WRS (3 * FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
 // COMMIT_W_QP_ID 1: send Commits  -- receive Writes
 #define LDR_MAX_COM_WRS (MESSAGES_IN_BCAST_BATCH)
 #define LDR_MAX_RECV_W_WRS (FOLLOWER_MACHINE_NUM * W_CREDITS)
@@ -316,7 +316,7 @@
 //--------FOLLOWER--------------
 // // PREP_ACK_QP_ID 0: receive Prepares -- send ACKs
 #define FLR_MAX_ACK_WRS (1)
-#define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS)
+#define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS) // if not enough prep messges get lost
 // COMMIT_W_QP_ID 1: send Writes  -- receive Commits
 #define FLR_MAX_W_WRS (W_CREDITS)
 #define FLR_MAX_RECV_COM_WRS (COMMIT_CREDITS)
@@ -326,10 +326,12 @@
 #define ACK_SEND_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_ACK_WRS + 2))
 
 //-- LEADER
-#define LEADER_W_BUF_SIZE ((LDR_W_RECV_SIZE * FOLLOWER_MACHINE_NUM) * W_CREDITS)
-#define LEADER_ACK_BUF_SIZE (LDR_ACK_RECV_SIZE * FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
-#define LEADER_W_BUF_SLOTS (FOLLOWER_MACHINE_NUM * W_CREDITS)
+
 #define LEADER_ACK_BUF_SLOTS (FOLLOWER_MACHINE_NUM * PREPARE_CREDITS)
+#define LEADER_ACK_BUF_SIZE (LDR_ACK_RECV_SIZE * LEADER_ACK_BUF_SLOTS)
+#define LEADER_W_BUF_SLOTS (FOLLOWER_MACHINE_NUM * W_CREDITS)
+#define LEADER_W_BUF_SIZE (LDR_W_RECV_SIZE * LEADER_W_BUF_SLOTS)
+
 #define LEADER_BUF_SIZE (LEADER_W_BUF_SIZE + LEADER_ACK_BUF_SIZE)
 #define LEADER_BUF_SLOTS (LEADER_W_BUF_SLOTS + LEADER_ACK_BUF_SLOTS)
 
@@ -339,14 +341,14 @@
 
 
 //--FOLLOWER
-#define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
+#define FLR_PREP_BUF_SLOTS (5 * PREPARE_CREDITS)
 #define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE * FLR_PREP_BUF_SLOTS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
 #define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
 #define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
 
-#define FLR_PENDING_WRITES (2 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
+#define FLR_PENDING_WRITES (1 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
 #define FLR_DISALLOW_OUT_OF_ORDER_PREPARES 1
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
@@ -614,6 +616,7 @@ struct fifo {
 
 };
 
+
 struct prep_fifo {
 	struct prep_message *prep_message;
 	uint32_t push_ptr;
@@ -705,13 +708,21 @@ struct thread_stats { // 2 cache lines
 	long long remotes_per_client;
 	long long locals_per_client;
 
-	long long updates_per_client;
-	long long acks_per_client;  //only LIN
-	long long invs_per_client; //only LIN
+	long long preps_sent;
+	long long acks_sent;
+	long long coms_sent;
 
-	long long received_updates_per_client;
-	long long received_acks_per_client; //only LIN
-	long long received_invs_per_client; //only LIN
+  long long preps_sent_mes_num;
+  long long acks_sent_mes_num;
+  long long coms_sent_mes_num;
+
+  long long received_coms;
+	long long received_acks;
+	long long received_preps;
+
+  long long received_coms_mes_num;
+  long long received_acks_mes_num;
+  long long received_preps_mes_num;
 
 	long long remote_messages_per_client;
 	long long cold_keys_per_trace;

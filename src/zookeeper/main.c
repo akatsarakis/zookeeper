@@ -66,6 +66,9 @@ int main(int argc, char *argv[])
 
   green_printf("LEADER PREPARE INLINING %d, LEADER PENDING WRITES %d \n",
 							 LEADER_PREPARE_ENABLE_INLINING, LEADER_PENDING_WRITES);
+  cyan_printf("PREPARE CREDITS %d, FLR PREPARE BUF SLOTS %d, FLR PREPARE BUF SIZE %d\n",
+              PREPARE_CREDITS, FLR_PREP_BUF_SLOTS, FLR_PREP_BUF_SIZE);
+
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
@@ -79,11 +82,11 @@ int main(int argc, char *argv[])
   assert(SESSIONS_PER_THREAD < M_16);
 
 
-
-  yellow_printf("WRITE: size of write recv slot %d size of w_message %lu , "
-           "value size %d, size of cache op %lu , sizeof udreq w message %lu \n",
-         LDR_W_RECV_SIZE, sizeof(struct w_message), VALUE_SIZE,
-         sizeof(struct cache_op), sizeof(struct w_message_ud_req));
+//
+//  yellow_printf("WRITE: size of write recv slot %d size of w_message %lu , "
+//           "value size %d, size of cache op %lu , sizeof udreq w message %lu \n",
+//         LDR_W_RECV_SIZE, sizeof(struct w_message), VALUE_SIZE,
+//         sizeof(struct cache_op), sizeof(struct w_message_ud_req));
   assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(sizeof(struct w_message) == FLR_W_SEND_SIZE);
 

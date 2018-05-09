@@ -41,12 +41,12 @@ void *print_stats(void* no_arg)
             all_stats.cache_hits_per_client[i] = (curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread) / seconds;
             all_stats.remotes_per_client[i] = (curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client) / seconds;
             all_stats.locals_per_client[i] = (curr_c_stats[i].locals_per_client - prev_c_stats[i].locals_per_client) / seconds;
-            all_stats.updates_per_client[i] = (curr_c_stats[i].updates_per_client - prev_c_stats[i].updates_per_client) / seconds;
-            all_stats.invs_per_client[i] = (curr_c_stats[i].invs_per_client - prev_c_stats[i].invs_per_client) / seconds;
-            all_stats.acks_per_client[i] = (curr_c_stats[i].acks_per_client - prev_c_stats[i].acks_per_client) / seconds;
-            all_stats.received_updates_per_client[i] = (curr_c_stats[i].received_updates_per_client - prev_c_stats[i].received_updates_per_client) / seconds;
-            all_stats.received_invs_per_client[i] = (curr_c_stats[i].received_invs_per_client - prev_c_stats[i].received_invs_per_client) / seconds;
-            all_stats.received_acks_per_client[i] = (curr_c_stats[i].received_acks_per_client - prev_c_stats[i].received_acks_per_client) / seconds;
+            all_stats.updates_per_client[i] = (curr_c_stats[i].preps_sent - prev_c_stats[i].preps_sent) / seconds;
+            all_stats.invs_per_client[i] = (curr_c_stats[i].coms_sent - prev_c_stats[i].coms_sent) / seconds;
+            all_stats.acks_per_client[i] = (curr_c_stats[i].acks_sent - prev_c_stats[i].acks_sent) / seconds;
+            all_stats.received_updates_per_client[i] = (curr_c_stats[i].received_coms - prev_c_stats[i].received_coms) / seconds;
+            all_stats.received_invs_per_client[i] = (curr_c_stats[i].received_preps - prev_c_stats[i].received_preps) / seconds;
+            all_stats.received_acks_per_client[i] = (curr_c_stats[i].received_acks - prev_c_stats[i].received_acks) / seconds;
             if (curr_c_stats[i].remote_messages_per_client - prev_c_stats[i].remote_messages_per_client > 0) {
                 all_stats.average_coalescing_per_client[i] =  ((curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client)
                                                                /(double) (curr_c_stats[i].remote_messages_per_client - prev_c_stats[i].remote_messages_per_client));

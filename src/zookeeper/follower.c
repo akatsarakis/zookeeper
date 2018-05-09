@@ -33,6 +33,7 @@ void *follower(void *arg)
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
   struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
   struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SIZE);
+//  if (t_id == 0) printf("prep buffer starts at %llu, com buffer starts at %llu \n", prep_buffer, com_buffer);
   /* ---------------------------------------------------------------------------
   ------------------------------MULTICAST SET UP-------------------------------
   ---------------------------------------------------------------------------*/
@@ -151,7 +152,8 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------LATENCY AND DEBUG-----------------------------------
   ---------------------------------------------------------------------------*/
-  uint32_t stalled_counter = 0;
+  uint32_t stalled_counter = 0, wait_for_gid_dbg_counter = 0, credit_dbg_counter = 0,
+    wait_for_prepares_dbg_counter = 0, wait_for_coms_dbg_counter = 0;
   uint8_t stalled = 0, debug_polling = 0;
   struct timespec start, end;
   uint16_t debug_ptr = 0;
@@ -161,19 +163,15 @@ void *follower(void *arg)
   ---------------------------------------------------------------------------*/
   while(1) {
 
-    if (unlikely(credit_debug_cnt > M_1)) {
-      red_printf("Follower %d misses credits \n", t_id);
-//          red_printf("Ack credits %d , inv Credits %d , UPD credits %d \n", credits[ACK_VC][(machine_id + 1) % MACHINE_NUM],
-//                     credits[INV_VC][(machine_id + 1) % MACHINE_NUM], credits[UPD_VC][(machine_id + 1) % MACHINE_NUM]);
-      credit_debug_cnt = 0;
-    }
-
+    flr_check_debug_cntrs(&credit_debug_cnt, &wait_for_coms_dbg_counter,
+                          &wait_for_prepares_dbg_counter,
+                          &wait_for_gid_dbg_counter, t_id);
 
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
     poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
-                      prep_recv_wc, prep_recv_info, t_id, flr_id);
+                      prep_recv_wc, prep_recv_info, t_id, flr_id, &wait_for_prepares_dbg_counter);
 
 
 
@@ -188,12 +186,12 @@ void *follower(void *arg)
     ---------------------------------------------------------------------------*/
 
     poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, cb->dgram_recv_cq[COMMIT_W_QP_ID],
-                  com_recv_wc, com_recv_info, t_id, flr_id);
+                  com_recv_wc, com_recv_info, t_id, flr_id, &wait_for_coms_dbg_counter);
 
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------
     ---------------------------------------------------------------------------*/
-    flr_propagate_updates(p_writes, p_acks, resp, t_id);
+    flr_propagate_updates(p_writes, p_acks, resp, t_id, &wait_for_gid_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------

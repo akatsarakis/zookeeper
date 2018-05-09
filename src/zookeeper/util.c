@@ -976,11 +976,16 @@ void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* r
 ------------------------------LEADER --------------------------------------
 ---------------------------------------------------------------------------*/
 // construct a prep_message-- max_size must be in bytes
-void init_fifo(struct fifo **fifo, uint32_t max_size)
+void init_fifo(struct fifo **fifo, uint32_t max_size, uint32_t fifos_num)
 {
-    (*fifo) = (struct fifo *)malloc(sizeof(struct fifo));
-    memset(fifo, 0, sizeof(struct fifo));
-    (*fifo)->fifo = malloc(max_size);
+  (*fifo) = (struct fifo *)malloc(fifos_num * sizeof(struct fifo));
+  memset((*fifo), 0, fifos_num *  sizeof(struct fifo));
+  for (int i = 0; i < fifos_num; ++i) {
+    fifo[i]->fifo = malloc(max_size);
+    memset(fifo[i]->fifo, 0, max_size);
+  }
+
+
 }
 
 
@@ -989,57 +994,57 @@ void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slo
                     uint32_t slot_size, uint32_t posted_recvs, struct ibv_recv_wr *recv_wr,
                     struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf)
 {
-    (*recv) = malloc(sizeof(struct recv_info));
-    (*recv)->push_ptr = push_ptr;
-    (*recv)->buf_slots = buf_slots;
-    (*recv)->slot_size = slot_size;
-    (*recv)->posted_recvs = posted_recvs;
-    (*recv)->recv_wr = recv_wr;
-    (*recv)->recv_qp = recv_qp;
-    (*recv)->recv_sgl = recv_sgl;
-    (*recv)->buf = buf;
+  (*recv) = malloc(sizeof(struct recv_info));
+  (*recv)->push_ptr = push_ptr;
+  (*recv)->buf_slots = buf_slots;
+  (*recv)->slot_size = slot_size;
+  (*recv)->posted_recvs = posted_recvs;
+  (*recv)->recv_wr = recv_wr;
+  (*recv)->recv_qp = recv_qp;
+  (*recv)->recv_sgl = recv_sgl;
+  (*recv)->buf = buf;
 }
 
 
 // Set up a struct that stores pending writes
 void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
 {
-    int i;
-    (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
-    memset((*p_writes), 0, sizeof(struct pending_writes));
-    //(*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
-    (*p_writes)->g_id = (uint64_t*) malloc(size * sizeof(uint64_t));
-    (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-    (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
-    (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
-    (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
-    (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
-    (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
-    (*p_writes)->ptrs_to_ops = (struct prepare**) malloc(size * sizeof(struct prepare*));
+  int i;
+  (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
+  memset((*p_writes), 0, sizeof(struct pending_writes));
+  //(*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
+  (*p_writes)->g_id = (uint64_t*) malloc(size * sizeof(uint64_t));
+  (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
+  (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
+  (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+  (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
+  (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
+  (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
+  (*p_writes)->ptrs_to_ops = (struct prepare**) malloc(size * sizeof(struct prepare*));
 
-    memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
-    (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
-    memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
-    (*p_writes)->prep_fifo->prep_message =
-      (struct prep_message*) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
-    memset((*p_writes)->prep_fifo->prep_message, 0, PREP_FIFO_SIZE * sizeof(struct prep_message));
-    //init_fifo(&(*p_writes)->prep_fifo, PREP_FIFO_SIZE * sizeof(struct prep_message));
-    assert((*p_writes)->prep_fifo != NULL);
-    //  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
-    //  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
-    memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
-    for (i = 0; i < SESSIONS_PER_THREAD; i++) (*p_writes)->session_has_pending_write[i] = false;
-    for (i = 0; i < size; i++) {
-      (*p_writes)->w_state[i] = INVALID;
-    }
-    struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
-    for (i = 0; i < PREP_FIFO_SIZE; i++) {
-        preps[i].opcode = CACHE_OP_PUT;
-        for(uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
-            preps[i].prepare[j].opcode = CACHE_OP_PUT;
-            preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
-        }
-    }
+  memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
+  (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
+  memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
+  (*p_writes)->prep_fifo->prep_message =
+    (struct prep_message*) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
+  memset((*p_writes)->prep_fifo->prep_message, 0, PREP_FIFO_SIZE * sizeof(struct prep_message));
+  //init_fifo(&(*p_writes)->prep_fifo, PREP_FIFO_SIZE * sizeof(struct prep_message));
+  assert((*p_writes)->prep_fifo != NULL);
+  //  memset((*p_writes)->write_ops, 0, size * sizeof(struct write_op));
+  //  memset((*p_writes)->unordered_writes, 0, size * sizeof(uint32_t));
+  memset((*p_writes)->acks_seen, 0, size * sizeof(uint8_t));
+  for (i = 0; i < SESSIONS_PER_THREAD; i++) (*p_writes)->session_has_pending_write[i] = false;
+  for (i = 0; i < size; i++) {
+    (*p_writes)->w_state[i] = INVALID;
+  }
+  struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
+  for (i = 0; i < PREP_FIFO_SIZE; i++) {
+      preps[i].opcode = CACHE_OP_PUT;
+      for(uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
+          preps[i].prepare[j].opcode = CACHE_OP_PUT;
+          preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+      }
+  }
 }
 
 
