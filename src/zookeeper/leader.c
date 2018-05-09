@@ -95,7 +95,6 @@ void *leader(void *arg)
   init_recv_info(&ack_recv_info, ack_buf_push_ptr, LEADER_ACK_BUF_SLOTS,
                  (uint32_t)LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl,
                  (void*) ack_buffer);
-  printf("Leader creates recv info\n");
 
 
 
@@ -130,11 +129,12 @@ void *leader(void *arg)
   struct write_op *w_ops[LEADER_PENDING_WRITES];
   struct mica_resp *resp, *commit_resp;
 	set_up_ldr_ops(&ops, &resp, &commit_resp, &coh_buf, &com_fifo);
-	set_up_ldr_mrs(&prep_mr, coh_buf, &com_mr, (void *)com_fifo->commits, cb);
+
 	uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
   struct pending_writes *p_writes;
   set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES);
-
+  void * prep_buf = (void *) p_writes->prep_fifo->prep_message;
+  set_up_ldr_mrs(&prep_mr, prep_buf, &com_mr, (void *)com_fifo->commits, cb);
 
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
@@ -155,22 +155,27 @@ void *leader(void *arg)
 	------------------------------LATENCY AND DEBUG-----------------------------------
 	---------------------------------------------------------------------------*/
 	uint32_t stalled_counter = 0;
+  uint32_t wait_for_gid_dbg_counter = 0;
 	uint8_t stalled = 0, debug_polling = 0;
 	struct timespec start, end;
 	uint16_t debug_ptr = 0;
 	green_printf("Leader %d  reached the loop \n", t_id);
+//  if (t_id == 1) exit(0);
 	/* ---------------------------------------------------------------------------
 	------------------------------START LOOP--------------------------------
 	---------------------------------------------------------------------------*/
 	while(true) {
 //
-		if (unlikely(credit_debug_cnt > M_1)) {
-			red_printf("Leader %d misses credits \n", t_id);
-			red_printf("Prepare credits %d , Commit Credits %d \n", credits[PREP_VC][0],
-					   credits[COMM_VC][0]);
-			credit_debug_cnt = 0;
+		if (unlikely(wait_for_gid_dbg_counter > M_128)) {
+			red_printf("Leader %d waits for the g_id \n", t_id);
+      wait_for_gid_dbg_counter = 0;
 		}
 
+//    assert(p_writes->size <= SESSIONS_PER_THREAD);
+//    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
+//      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
+//      assert (p_writes->w_state[ptr] == INVALID);
+//    }
 
 		/* ---------------------------------------------------------------------------
 		------------------------------ POLL FOR ACKS--------------------------------
@@ -181,6 +186,8 @@ void *leader(void *arg)
                     t_id);
 
 
+
+
 /* ---------------------------------------------------------------------------
 		------------------------------ PROPAGATE UPDATES--------------------------
 		---------------------------------------------------------------------------*/
@@ -189,7 +196,9 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      propagate_updates(p_writes, com_fifo, commit_resp, t_id);
+      propagate_updates(p_writes, com_fifo, commit_resp, t_id, &wait_for_gid_dbg_counter);
+
+
 
     /* ---------------------------------------------------------------------------
 		------------------------------ BROADCAST COMMITS--------------------------
@@ -201,9 +210,11 @@ void *leader(void *arg)
                         w_recv_info, t_id);
 
 
-		/* ---------------------------------------------------------------------------
-		------------------------------PROBE THE CACHE--------------------------------------
-		---------------------------------------------------------------------------*/
+
+
+    /* ---------------------------------------------------------------------------
+    ------------------------------PROBE THE CACHE--------------------------------------
+    ---------------------------------------------------------------------------*/
 
 
 		// Propagate the updates before probing the cache
@@ -225,6 +236,11 @@ void *leader(void *arg)
     // Assign a global write  id to each new write
     get_wids(p_writes, t_id);
 
+    assert(p_writes->size <= SESSIONS_PER_THREAD);
+    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
+      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
+      assert (p_writes->w_state[ptr] == INVALID);
+    }
 
 		/* ---------------------------------------------------------------------------
 		------------------------------BROADCASTS--------------------------------------
@@ -234,6 +250,12 @@ void *leader(void *arg)
 				 Post the appropriate number of credit receives before sending anything */
       broadcast_prepares(p_writes, credits, cb, credit_wc, &credit_debug_cnt,
                          prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info, t_id);
+
+    assert(p_writes->size <= SESSIONS_PER_THREAD);
+    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
+      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
+      assert (p_writes->w_state[ptr] == INVALID);
+    }
 
 //		/* ---------------------------------------------------------------------------
 //		------------------------------SEND CREDITS--------------------------------

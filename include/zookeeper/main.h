@@ -25,7 +25,7 @@
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 
-#define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 8 ? 0 : 1 )// socket where the cache is bind
+#define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 30 ? 0 : 1 )// socket where the cache is bind
 
 #define CLIENT_NUM (LEADERS_PER_MACHINE * MACHINE_NUM)
 #define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
@@ -292,13 +292,13 @@
 #define FLR_PREPARE_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 2
+#define MAX_PREP_COALESCE 9
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
 #define FLR_PREP_RECV_SIZE (GRH_SIZE + LDR_PREP_SEND_SIZE)
 
-#define LEADER_PREPARE_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (LDR_PREP_SEND_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
+#define LEADER_PREPARE_ENABLE_INLINING ((LDR_PREP_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 
 //---------LEADER-----------------------
@@ -391,7 +391,8 @@
 #define FLR_SEND_CR_Q_DEPTH 500 //
 
 
-
+// DEBUG
+#define DEBUG_PREPARES 0
 
 
 

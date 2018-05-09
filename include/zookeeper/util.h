@@ -184,7 +184,7 @@ void pre_post_recvs(struct hrd_ctrl_blk*, uint32_t* , bool, struct mcast_essenti
 void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
                     struct mica_resp**, struct mica_op**, struct commit_fifo**);
 // Set up the memory registrations required in the leader if there is no Inlining
-void set_up_ldr_mrs(struct ibv_mr**, struct mica_op*, struct ibv_mr**, void*,
+void set_up_ldr_mrs(struct ibv_mr**, void*, struct ibv_mr**, void*,
                     struct hrd_ctrl_blk*);
 // Set up the credits for leader and follower
 void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,

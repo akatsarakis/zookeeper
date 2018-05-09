@@ -1142,12 +1142,12 @@ void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
 }
 
 // Set up the memory registrations required in the leader if there is no Inlining
-void set_up_ldr_mrs(struct ibv_mr **prep_mr, struct mica_op *prep_buf,
+void set_up_ldr_mrs(struct ibv_mr **prep_mr, void *prep_buf,
                     struct ibv_mr **com_mr, void *com_buf,
                     struct hrd_ctrl_blk *cb)
 {
-  if (LEADER_ENABLE_INLINING == 0) {
-    if (WRITE_RATIO != 0) *prep_mr = register_buffer(cb->pd, (void*)prep_buf, COH_BUF_SIZE);
+  if (!LEADER_PREPARE_ENABLE_INLINING) {
+   *prep_mr = register_buffer(cb->pd, (void*)prep_buf, PREP_FIFO_SIZE * sizeof(struct prep_message));
   }
   if (!COM_ENABLE_INLINING) *com_mr = register_buffer(cb->pd, com_buf,
                                                       COMMIT_CREDITS * sizeof(struct com_message));
@@ -1191,6 +1191,7 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
       com_send_wr[index].num_sge = 1;
       com_send_wr[index].sg_list = &com_send_sgl[j];
       if (LEADER_PREPARE_ENABLE_INLINING == 1) prep_send_wr[index].send_flags = IBV_SEND_INLINE;
+      else prep_send_wr[index].send_flags = 0;
       if (COM_ENABLE_INLINING == 1) com_send_wr[index].send_flags = IBV_SEND_INLINE;
       prep_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &prep_send_wr[index + 1];
       com_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &com_send_wr[index + 1];

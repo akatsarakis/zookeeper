@@ -9,7 +9,7 @@ void *follower(void *arg)
                   (machine_id * FOLLOWERS_PER_MACHINE) + params.id;
   uint8_t flr_id = machine_id > LEADER_MACHINE ? (machine_id - 1) : machine_id;
   uint16_t t_id = params.id;
-  yellow_printf("FOLLOWER-id %d \n", flr_id);
+//  yellow_printf("FOLLOWER-id %d \n", flr_id);
   uint16_t remote_ldr_thread = t_id;
   if (ENABLE_MULTICAST == 1 && t_id == 0) {
       red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
@@ -32,7 +32,7 @@ void *follower(void *arg)
   uint32_t prep_push_ptr = 0, prep_pull_ptr = 0;
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
   struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
-  struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SLOTS);
+  struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SIZE);
   /* ---------------------------------------------------------------------------
   ------------------------------MULTICAST SET UP-------------------------------
   ---------------------------------------------------------------------------*/
@@ -114,8 +114,9 @@ void *follower(void *arg)
   struct mica_resp update_resp[BCAST_TO_CACHE_BATCH] = {0}, inv_resp[BCAST_TO_CACHE_BATCH];
   struct ibv_mr *ops_mr, *w_mr;
   struct extended_cache_op *ops, *next_ops, *third_ops;
-  set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
-             &key_homes, &next_key_homes, &third_key_homes);
+//  set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
+//             &key_homes, &next_key_homes, &third_key_homes);
+  resp = (struct mica_resp *)malloc(FLR_PENDING_WRITES * sizeof(struct mica_resp));
   set_up_coh_ops(&update_ops, &ack_bcast_ops, &inv_ops, &inv_to_send_ops, update_resp, inv_resp, &coh_buf, protocol);
   set_up_mrs(&ops_mr, &w_mr, ops, coh_buf, cb);
   uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
@@ -161,10 +162,10 @@ void *follower(void *arg)
   while(1) {
 
     if (unlikely(credit_debug_cnt > M_1)) {
-        red_printf("Follower %d misses credits \n", t_id);
+      red_printf("Follower %d misses credits \n", t_id);
 //          red_printf("Ack credits %d , inv Credits %d , UPD credits %d \n", credits[ACK_VC][(machine_id + 1) % MACHINE_NUM],
 //                     credits[INV_VC][(machine_id + 1) % MACHINE_NUM], credits[UPD_VC][(machine_id + 1) % MACHINE_NUM]);
-        credit_debug_cnt = 0;
+      credit_debug_cnt = 0;
     }
 
 
@@ -174,13 +175,13 @@ void *follower(void *arg)
     poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
                       prep_recv_wc, prep_recv_info, t_id, flr_id);
 
+
+
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
     send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
                      prep_recv_info, com_recv_info, flr_id,  ack, p_acks, t_id);
-
-
 
     /* ---------------------------------------------------------------------------
     ------------------------------POLL FOR COMMITS---------------------------------
@@ -188,7 +189,6 @@ void *follower(void *arg)
 
     poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, cb->dgram_recv_cq[COMMIT_W_QP_ID],
                   com_recv_wc, com_recv_info, t_id, flr_id);
-
 
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------

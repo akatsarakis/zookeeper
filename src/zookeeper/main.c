@@ -64,7 +64,8 @@ int main(int argc, char *argv[])
                 sizeof(struct prep_message), LDR_PREP_SEND_SIZE,
                 sizeof(struct prep_message_ud_req), FLR_PREP_RECV_SIZE);
 
-  green_printf("LEADER PREPARE INLINING %d \n", LEADER_PREPARE_ENABLE_INLINING);
+  green_printf("LEADER PREPARE INLINING %d, LEADER PENDING WRITES %d \n",
+							 LEADER_PREPARE_ENABLE_INLINING, LEADER_PENDING_WRITES);
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
@@ -102,8 +103,8 @@ int main(int argc, char *argv[])
   uint32_t random_id6 = *(uint32_t *)random_id5;
 
 
-  printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu random id 5(123456789) %u \n",
-         random_id3, random_id4, random_id6);
+//  printf("radnom_id 3(123456789) %lu,radnom_id 4(473261955) %lu random id 5(123456789) %u \n",
+//         random_id3, random_id4, random_id6);
 
 
 	int i, c;

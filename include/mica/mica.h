@@ -36,8 +36,8 @@
 
 #define MICA_LOG_BITS 40
 
-#define MICA_INDEX_SHM_KEY 3185
-#define MICA_LOG_SHM_KEY 4185
+#define MICA_INDEX_SHM_KEY 1185
+#define MICA_LOG_SHM_KEY 2185
 
 /*
  * Debug values:

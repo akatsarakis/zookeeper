@@ -48,3 +48,5 @@
 #define M_1024_ 1073741823
 
 #define MILLION 1000000
+
+#define B_4 4294967296
