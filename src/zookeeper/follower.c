@@ -165,7 +165,7 @@ void *follower(void *arg)
 
     flr_check_debug_cntrs(&credit_debug_cnt, &wait_for_coms_dbg_counter,
                           &wait_for_prepares_dbg_counter,
-                          &wait_for_gid_dbg_counter, t_id);
+                          &wait_for_gid_dbg_counter, prep_buffer ,prep_pull_ptr, p_writes, t_id);
 
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------

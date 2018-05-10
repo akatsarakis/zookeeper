@@ -178,7 +178,7 @@ void *leader(void *arg)
 
      if (ENABLE_ASSERTIONS)
        ldr_check_debug_cntrs(credit_debug_cnt, &wait_for_acks_dbg_counter,
-                             &wait_for_gid_dbg_counter, t_id);
+                             &wait_for_gid_dbg_counter, p_writes, t_id);
 
 		/* ---------------------------------------------------------------------------
 		------------------------------ POLL FOR ACKS--------------------------------
@@ -240,11 +240,7 @@ void *leader(void *arg)
     // Assign a global write  id to each new write
     get_wids(p_writes, t_id);
 
-    assert(p_writes->size <= SESSIONS_PER_THREAD);
-    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
-      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
-      assert (p_writes->w_state[ptr] == INVALID);
-    }
+    if (ENABLE_ASSERTIONS) check_ldr_p_states(p_writes, t_id);
 
 		/* ---------------------------------------------------------------------------
 		------------------------------BROADCASTS--------------------------------------

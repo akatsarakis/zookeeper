@@ -19,7 +19,7 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 1
+#define FOLLOWERS_PER_MACHINE 10
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
 #define MACHINE_NUM 2
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
@@ -75,7 +75,7 @@
 #define FOLLOWER 1
 #define LEADER 2
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 60
+#define SESSIONS_PER_THREAD 20
 
 
 /*-------------------------------------------------
@@ -292,7 +292,7 @@
 #define FLR_PREPARE_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 3
+#define MAX_PREP_COALESCE 12
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
@@ -341,14 +341,14 @@
 
 
 //--FOLLOWER
-#define FLR_PREP_BUF_SLOTS (5 * PREPARE_CREDITS)
+#define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
 #define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE * FLR_PREP_BUF_SLOTS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
 #define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
 #define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
 
-#define FLR_PENDING_WRITES (1 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
+#define FLR_PENDING_WRITES (2 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
 #define FLR_DISALLOW_OUT_OF_ORDER_PREPARES 1
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
@@ -550,10 +550,11 @@ struct completed_writes {
 
 // The format of an ack message
 struct ack_message {
+	uint8_t local_id[8]; // the first local id that is being acked
   uint8_t follower_id;
   uint8_t opcode;
-	uint16_t ack_num;
-	uint8_t local_id[8]; // the first local id that is being acked
+  uint16_t ack_num;
+
 };
 
 
@@ -566,9 +567,10 @@ struct ack_message_ud_req {
 
 // The format of a commit message
 struct com_message {
+  uint8_t l_id[8];
   uint16_t com_num;
 	uint16_t opcode;
-	uint8_t l_id[8];
+
 };
 
 // commit message plus the grh
@@ -649,21 +651,21 @@ struct pending_writes {
 	bool all_sessions_stalled;
 };
 
-// follower pending writes
-struct flr_p_writes {
-	uint64_t *g_id;
-	struct cache_op **ptrs_to_ops;
-	uint64_t local_w_id;
-	uint32_t *session_id;
-	enum write_state *w_state;
-	uint32_t push_ptr;
-	uint32_t pull_ptr;
-	uint32_t size;
-	uint8_t *flr_id;
-	bool *is_local;
-	bool *session_has_pending_write;
-	bool all_sessions_stalled;
-};
+//// follower pending writes
+//struct flr_p_writes {
+//	uint64_t *g_id;
+//	struct cache_op **ptrs_to_ops;
+//	uint64_t local_w_id;
+//	uint32_t *session_id;
+//	enum write_state *w_state;
+//	uint32_t push_ptr;
+//	uint32_t pull_ptr;
+//	uint32_t size;
+//	uint8_t *flr_id;
+//	bool *is_local;
+//	bool *session_has_pending_write;
+//	bool all_sessions_stalled;
+//};
 
 // struct for the follower to keep track of the acks it has sent
 struct pending_acks {
