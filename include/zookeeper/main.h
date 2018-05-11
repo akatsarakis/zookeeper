@@ -19,7 +19,7 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 10
+#define FOLLOWERS_PER_MACHINE 1
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
 #define MACHINE_NUM 2
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
@@ -191,7 +191,12 @@
 #define SEND_MCAST_QP 0
 #define RECV_MCAST_QP 1
 #define MCAST_QPS MACHINE_NUM
-#define MCAST_GROUPS_PER_CLIENT MACHINE_NUM
+//#define MCAST_GROUPS_NUM MACHINE_NUM
+
+#define MCAST_QP_NUM 2
+#define PREP_MCAST_QP 0
+#define COM_MCAST_QP 1
+#define MCAST_GROUPS_NUM 2
 
 // ------COMMON-------------------
 #define MAX_BCAST_BATCH (ENABLE_MULTICAST == 1 ? 4 : 4) //8 //(128 / (MACHINE_NUM - 1)) // how many broadcasts can fit in a batch

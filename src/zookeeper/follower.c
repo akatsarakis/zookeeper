@@ -45,11 +45,17 @@ void *follower(void *arg)
       init_multicast(&mcast_data, &mcast, t_id, cb, protocol);
       assert(mcast != NULL);
   }
+
+  struct ibv_cq *prep_recv_cq = ENABLE_MULTICAST == 1 ? mcast->recv_cq[PREP_MCAST_QP] : cb->dgram_recv_cq[PREP_ACK_QP_ID];
+  struct ibv_qp *prep_recv_qp = ENABLE_MULTICAST == 1 ? mcast->recv_qp[PREP_MCAST_QP] : cb->dgram_qp[PREP_ACK_QP_ID];
+  struct ibv_cq *com_recv_cq = ENABLE_MULTICAST == 1 ? mcast->recv_cq[COM_MCAST_QP] : cb->dgram_recv_cq[COMMIT_W_QP_ID];
+  struct ibv_qp *com_recv_qp = ENABLE_MULTICAST == 1 ? mcast->recv_qp[COM_MCAST_QP] : cb->dgram_qp[COMMIT_W_QP_ID];
+  uint32_t lkey = ENABLE_MULTICAST == 1 ?  mcast->recv_mr->lkey : cb->dgram_buf_mr->lkey;
   /* Fill the RECV queues that receive the Commits and Prepares, (we need to do this early) */
   if (WRITE_RATIO > 0) {
-    pre_post_recvs(cb, &prep_push_ptr, ENABLE_MULTICAST, mcast, (void *) prep_buffer,
+    pre_post_recvs(&prep_push_ptr, prep_recv_qp, lkey, (void *) prep_buffer,
                    FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID, (uint32_t)FLR_PREP_RECV_SIZE);
-    pre_post_recvs(cb, &com_push_ptr, false, NULL, (void *) com_buffer,
+    pre_post_recvs(&com_push_ptr, prep_recv_qp, lkey, (void *) com_buffer,
                    FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID, (uint32_t)FLR_COM_RECV_SIZE);
   }
   /* -----------------------------------------------------
@@ -104,9 +110,8 @@ void *follower(void *arg)
       latency_info.key_to_measure = malloc(sizeof(struct cache_key));
 
 
-  // These are useful as the follower does receive mcasts
-  struct ibv_cq *coh_recv_cq = ENABLE_MULTICAST == 1 ? mcast->recv_cq : cb->dgram_recv_cq[BROADCAST_UD_QP_ID];
-  struct ibv_qp *coh_recv_qp = ENABLE_MULTICAST == 1 ? mcast->recv_qp : cb->dgram_qp[BROADCAST_UD_QP_ID];
+
+
 
   struct mica_op *coh_buf;
   struct cache_op *update_ops, *ack_bcast_ops;

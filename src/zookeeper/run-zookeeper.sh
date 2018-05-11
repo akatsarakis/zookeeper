@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 #houston-sanantonio-austin-indianapolis-philly-chicago-detroit-baltimore-atlanta
-allIPs=(129.215.165.8 129.215.165.7 129.215.165.9 129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
-localIP=$(ip addr | grep 'state UP' -A2 | sed -n 3p | awk '{print $2}' | cut -f1  -d'/')
+allIPs=(192.168.5.18 192.168.5.17 192.168.5.19  129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
+localIP=$(ip addr | grep 'infiniband' -A2 | sed -n 2p | awk '{print $2}' | cut -f1  -d'/')
 
 tmp=$((${#localIP}-1))
 machine_id=-1

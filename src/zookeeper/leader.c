@@ -14,7 +14,7 @@ void *leader(void *arg)
 	if (ENABLE_MULTICAST == 1 && t_id == 0) {
 		red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
 		// TODO to fix it we must post receives seperately for acks and multicasts
-		assert(false);
+//		assert(false);
 	}
 	int protocol = LEADER;
 
@@ -48,7 +48,7 @@ void *leader(void *arg)
 	/* Fill the RECV queue that receives the Broadcasts, we need to do this early */
 	if (WRITE_RATIO > 0) {
     // Pre post receives only for writes
-    pre_post_recvs(cb, &w_buf_push_ptr, false, NULL, (void *)w_buffer,
+    pre_post_recvs(&w_buf_push_ptr, cb->dgram_qp[COMMIT_W_QP_ID], cb->dgram_buf_mr->lkey, (void *)w_buffer,
                    LEADER_W_BUF_SLOTS, LDR_MAX_RECV_W_WRS, COMMIT_W_QP_ID, LDR_W_RECV_SIZE);
   }
 

@@ -602,26 +602,26 @@ int pin_threads_avoiding_collisions(int c_id) {
 /* ---------------------------------------------------------------------------
 ------------------------------CLIENT INITIALIZATION --------------------------
 ---------------------------------------------------------------------------*/
-// Post receives for the coherence traffic in the init phase
-void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essentials *mcast, int protocol, void* buf)
-{
-    check_protocol(protocol);
-    int i, j;
-    int credits = protocol == FOLLOWER ? SC_CREDITS : BROADCAST_CREDITS;
-    int max_reqs = protocol == FOLLOWER ? SC_CLT_BUF_SLOTS : LIN_CLT_BUF_SLOTS;
-    for(i = 0; i < MACHINE_NUM - 1; i++) {
-        for(j = 0; j < credits; j++) {
-            if (ENABLE_MULTICAST == 1) {
-                hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
-                                    UD_REQ_SIZE, mcast->recv_mr->lkey);
-            }
-            else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
-                                     (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
-            MOD_ADD(*push_ptr, max_reqs);
-            //if (*push_ptr == 0) *push_ptr = 1;
-        }
-    }
-}
+//// Post receives for the coherence traffic in the init phase
+//void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essentials *mcast, int protocol, void* buf)
+//{
+//    check_protocol(protocol);
+//    int i, j;
+//    int credits = protocol == FOLLOWER ? SC_CREDITS : BROADCAST_CREDITS;
+//    int max_reqs = protocol == FOLLOWER ? SC_CLT_BUF_SLOTS : LIN_CLT_BUF_SLOTS;
+//    for(i = 0; i < MACHINE_NUM - 1; i++) {
+//        for(j = 0; j < credits; j++) {
+//            if (ENABLE_MULTICAST == 1) {
+//                hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
+//                                    UD_REQ_SIZE, mcast->recv_mr->lkey);
+//            }
+//            else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
+//                                     (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
+//            MOD_ADD(*push_ptr, max_reqs);
+//            //if (*push_ptr == 0) *push_ptr = 1;
+//        }
+//    }
+//}
 
 
 
@@ -803,67 +803,67 @@ void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sg
                     struct mica_op *coh_buf, uint16_t local_client_id,
                     struct hrd_ctrl_blk *cb, struct ibv_mr *coh_mr, struct mcast_essentials *mcast, int protocol)
 {
-    int i, j;
-    check_protocol(protocol);
-    //BROADCAST WRs and credit Receives
-    for (j = 0; j < MAX_BCAST_BATCH; j++) {
-        //coh_send_sgl[j].addr = (uint64_t) (uintptr_t) (coh_buf + j);
-        if (LEADER_ENABLE_INLINING == 0) coh_send_sgl[j].lkey = coh_mr->lkey;
-        for (i = 0; i < MESSAGES_IN_BCAST; i++) {
-            uint16_t rm_id;
-            if (i < machine_id) rm_id = (uint16_t) i;
-            else rm_id = (uint16_t) ((i + 1) % MACHINE_NUM);
-            uint16_t clt_i = (uint16_t) (rm_id * LEADERS_PER_MACHINE + local_client_id);
-            uint16_t index = (uint16_t) ((j * MESSAGES_IN_BCAST) + i);
-            assert (index < MESSAGES_IN_BCAST_BATCH);
-            if (ENABLE_MULTICAST == 1) {
-                coh_send_wr[index].wr.ud.ah = mcast->send_ah;
-                coh_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
-                coh_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
-            } else {
-                if (protocol == FOLLOWER) {
-                  coh_send_wr[index].wr.ud.ah = remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].ah;
-                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
-                }
-                else {
-//                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
-//                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
-                }
-              coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-            }
-            if (protocol == FOLLOWER) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
-            else coh_send_wr[index].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
-            coh_send_wr[index].num_sge = 1;
-            coh_send_wr[index].sg_list = &coh_send_sgl[j];
-            if (protocol == FOLLOWER) coh_send_wr[index].imm_data = (uint32) machine_id;
-            if (LEADER_ENABLE_INLINING == 1) coh_send_wr[index].send_flags = IBV_SEND_INLINE;
-            coh_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &coh_send_wr[index + 1];
-        }
-    }
-
-    // Coherence Receives
-    int max_coh_receives = protocol == FOLLOWER ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
-    for (i = 0; i < max_coh_receives; i++) {
-        coh_recv_sgl[i].length = UD_REQ_SIZE;
-        if (protocol == FOLLOWER && ENABLE_MULTICAST == 1)
-            coh_recv_sgl[i].lkey = mcast->recv_mr->lkey;
-        else  coh_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
-        coh_recv_wr[i].sg_list = &coh_recv_sgl[i];
-        coh_recv_wr[i].num_sge = 1;
-    }
-
-    // Do acknowledgements
-    if (protocol == LEADER) {
-        // ACK WRs
-        for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
-            ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-            //ack_wr[i].imm_data = machine_id;
-            ack_sgl[i].length = HERD_GET_REQ_SIZE;
-            ack_wr[i].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
-            ack_wr[i].num_sge = 1;
-            ack_wr[i].sg_list = &ack_sgl[i];
-        }
-    }
+//    int i, j;
+//    check_protocol(protocol);
+//    //BROADCAST WRs and credit Receives
+//    for (j = 0; j < MAX_BCAST_BATCH; j++) {
+//        //coh_send_sgl[j].addr = (uint64_t) (uintptr_t) (coh_buf + j);
+//        if (LEADER_ENABLE_INLINING == 0) coh_send_sgl[j].lkey = coh_mr->lkey;
+//        for (i = 0; i < MESSAGES_IN_BCAST; i++) {
+//            uint16_t rm_id;
+//            if (i < machine_id) rm_id = (uint16_t) i;
+//            else rm_id = (uint16_t) ((i + 1) % MACHINE_NUM);
+//            uint16_t clt_i = (uint16_t) (rm_id * LEADERS_PER_MACHINE + local_client_id);
+//            uint16_t index = (uint16_t) ((j * MESSAGES_IN_BCAST) + i);
+//            assert (index < MESSAGES_IN_BCAST_BATCH);
+//            if (ENABLE_MULTICAST == 1) {
+//                coh_send_wr[index].wr.ud.ah = mcast->send_ah;
+//                coh_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
+//                coh_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
+//            } else {
+//                if (protocol == FOLLOWER) {
+//                  coh_send_wr[index].wr.ud.ah = remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].ah;
+//                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
+//                }
+//                else {
+////                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
+////                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
+//                }
+//              coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+//            }
+//            if (protocol == FOLLOWER) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
+//            else coh_send_wr[index].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
+//            coh_send_wr[index].num_sge = 1;
+//            coh_send_wr[index].sg_list = &coh_send_sgl[j];
+//            if (protocol == FOLLOWER) coh_send_wr[index].imm_data = (uint32) machine_id;
+//            if (LEADER_ENABLE_INLINING == 1) coh_send_wr[index].send_flags = IBV_SEND_INLINE;
+//            coh_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &coh_send_wr[index + 1];
+//        }
+//    }
+//
+//    // Coherence Receives
+//    int max_coh_receives = protocol == FOLLOWER ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
+//    for (i = 0; i < max_coh_receives; i++) {
+//        coh_recv_sgl[i].length = UD_REQ_SIZE;
+//        if (protocol == FOLLOWER && ENABLE_MULTICAST == 1)
+//            coh_recv_sgl[i].lkey = mcast->recv_mr->lkey;
+//        else  coh_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+//        coh_recv_wr[i].sg_list = &coh_recv_sgl[i];
+//        coh_recv_wr[i].num_sge = 1;
+//    }
+//
+//    // Do acknowledgements
+//    if (protocol == LEADER) {
+//        // ACK WRs
+//        for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
+//            ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+//            //ack_wr[i].imm_data = machine_id;
+//            ack_sgl[i].length = HERD_GET_REQ_SIZE;
+//            ack_wr[i].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
+//            ack_wr[i].num_sge = 1;
+//            ack_wr[i].sg_list = &ack_sgl[i];
+//        }
+//    }
 }
 
 void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_send_wr, struct ibv_sge* credit_send_sgl,
@@ -1079,17 +1079,13 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
 
 // Prepost Receives on the Leader Side
 // Post receives for the coherence traffic in the init phase
-void pre_post_recvs(struct hrd_ctrl_blk *cb, uint32_t* push_ptr, bool enable_mcast_receive, struct mcast_essentials *mcast, void* buf,
+void pre_post_recvs(uint32_t* push_ptr, struct ibv_qp *recv_qp, uint32_t lkey, void* buf,
                     uint32_t max_reqs, uint32_t number_of_recvs, uint16_t QP_ID, uint32_t message_size)
 {
   uint32_t i;//, j;
   for(i = 0; i < number_of_recvs; i++) {
-      if (enable_mcast_receive) {
-        hrd_post_dgram_recv(mcast->recv_qp,	(buf + *push_ptr * message_size),
-                            message_size, mcast->recv_mr->lkey);
-      }
-      else hrd_post_dgram_recv(cb->dgram_qp[QP_ID],
-                               (buf + *push_ptr * message_size), message_size, cb->dgram_buf_mr->lkey);
+        hrd_post_dgram_recv(recv_qp,	(buf + *push_ptr * message_size),
+                            message_size, lkey);
       MOD_ADD(*push_ptr, max_reqs);
   }
 }
@@ -1330,27 +1326,32 @@ void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mc
                     int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
 {
   check_protocol(protocol);
-  uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
-                              (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
-  size_t dgram_buf_size = (size_t) (protocol == FOLLOWER ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
+
+  size_t dgram_buf_size = (size_t) (protocol == FOLLOWER ? FLR_BUF_SIZE : 0);
   int recv_q_depth = protocol == FOLLOWER ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
   *mcast_data = malloc(sizeof(struct mcast_info));
   (*mcast_data)->clt_id = local_client_id;
   setup_multicast(*mcast_data, recv_q_depth);
-  // char buf[40];
-  // inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, buf, 40);
-  // printf("client: joined dgid: %s mlid 0x%x sl %d\n", buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
+   char char_buf[40];
+   inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, char_buf, 40);
+   printf("client: joined dgid: %s mlid 0x%x sl %d\n", char_buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
   *mcast = malloc(sizeof(struct mcast_essentials));
   (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
   (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
   (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
-  (*mcast)->recv_cq = (*mcast_data)->cm_qp[RECV_MCAST_QP].cq;
-  (*mcast)->recv_qp = (*mcast_data)->cm_qp[RECV_MCAST_QP].cma_id->qp;
-  (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[RECV_MCAST_QP].pd, (void*) cb->dgram_buf,
-                                 dgram_buf_size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-                                                 IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
+  if (protocol == FOLLOWER) {
+    for (uint16_t i = 0; i < MCAST_QP_NUM; i++){
+      (*mcast)->recv_cq[i] = (*mcast_data)->cm_qp[i].cq;
+      (*mcast)->recv_qp[i] = (*mcast_data)->cm_qp[i].cma_id->qp;
+
+   }
+  (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[0].pd, (void *)cb->dgram_buf,
+                                 (size_t)FLR_BUF_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+                                                       IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
+  }
+
   free(*mcast_data);
-  assert((*mcast)->recv_mr != NULL);
+  if (protocol == FOLLOWER) assert((*mcast)->recv_mr != NULL);
 }
 
 
@@ -1383,11 +1384,11 @@ void resolve_addresses(struct mcast_info *mcast_data)
         if (ret) perror("Client: address bind failed");
     }
     // Destination addresses(i.e. multicast addresses)
-    for (i = 0; i < MCAST_GROUPS_PER_CLIENT; i ++) {
+    for (i = 0; i < MCAST_GROUPS_NUM; i ++) {
         mcast_data->dst_addr[i] = (struct sockaddr*)&mcast_data->dst_in[i];
         int m_cast_group_id = clt_id * MACHINE_NUM + i;
         sprintf(mcast_addr, "224.0.%d.%d", m_cast_group_id / 256, m_cast_group_id % 256);
-        // printf("mcast addr %d: %s\n", i, mcast_addr);
+        printf("mcast addr %d: %s\n", i, mcast_addr);
         ret = get_addr((char*) &mcast_addr, ((struct sockaddr *)&mcast_data->dst_in[i]));
         if (ret) printf("Client: failed to get dst address \n");
     }
@@ -1398,10 +1399,10 @@ void set_up_qp(struct cm_qps* qps, int max_recv_q_depth)
 {
     int ret, i, recv_q_depth;
     // qps[0].pd = ibv_alloc_pd(qps[0].cma_id->verbs); //new
-    for (i = 0; i < MCAST_QPS; i++) {
+    for (i = 0; i < MCAST_QP_NUM; i++) {
         qps[i].pd = ibv_alloc_pd(qps[i].cma_id->verbs);
         if (i > 0) qps[i].pd = qps[0].pd;
-        recv_q_depth = i == RECV_MCAST_QP ? max_recv_q_depth : 1; // TODO fix this
+        recv_q_depth = max_recv_q_depth;
         qps[i].cq = ibv_create_cq(qps[i].cma_id->verbs, recv_q_depth, &qps[i], NULL, 0);
         struct ibv_qp_init_attr init_qp_attr;
         memset(&init_qp_attr, 0, sizeof init_qp_attr);
@@ -1441,21 +1442,21 @@ void setup_multicast(struct mcast_info *mcast_data, int recv_q_depth)
     set_up_qp(mcast_data->cm_qp, recv_q_depth);
 
     struct rdma_cm_event* event;
-    for (i = 0; i < MCAST_GROUPS_PER_CLIENT; i ++) {
-        int qp_i = i == machine_id ? SEND_MCAST_QP : RECV_MCAST_QP;
+    for (i = 0; i < MCAST_GROUPS_NUM; i ++) {
+        int qp_i = i;
         ret = rdma_resolve_addr(mcast_data->cm_qp[i].cma_id, mcast_data->src_addr, mcast_data->dst_addr[i], 20000);
         if (ret) printf("Client %d: failed to resolve address: %d, qp_i %d \n", clt_id, i, qp_i);
         if (ret) perror("Reason");
         while (rdma_get_cm_event(mcast_data->channel, &event) == 0) {
             switch (event->event) {
                 case RDMA_CM_EVENT_ADDR_RESOLVED:
-                    // printf("Client %d: RDMA ADDRESS RESOLVED address: %d \n", clt_id, i);
+                     printf("Client %d: RDMA ADDRESS RESOLVED address: %d \n", clt_id, i);
                     ret = rdma_join_multicast(mcast_data->cm_qp[qp_i].cma_id, mcast_data->dst_addr[i], mcast_data);
                     if (ret) printf("unable to join multicast \n");
                     break;
                 case RDMA_CM_EVENT_MULTICAST_JOIN:
                     if (i == machine_id) mcast_data->mcast_ud_param = event->param.ud;
-                    // printf("RDMA JOIN MUlTICAST EVENT %d \n", i);
+                     printf("RDMA JOIN MUlTICAST EVENT %d \n", i);
                     break;
                 case RDMA_CM_EVENT_MULTICAST_ERROR:
                 default:
@@ -1513,11 +1514,11 @@ void multicast_testing(struct mcast_essentials *mcast, int clt_gid, struct hrd_c
     printf("THe mcast was sent, I am waiting for confirmation imm data %d\n", mcast_wr.imm_data);
     hrd_poll_cq(cb->dgram_send_cq[0], 1, &mcast_wc);
     printf("The mcast was sent \n");
-    hrd_poll_cq(mcast->recv_cq, 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
-    hrd_poll_cq(mcast->recv_cq, 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
-    hrd_poll_cq(mcast->recv_cq, 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
 
     exit(0);

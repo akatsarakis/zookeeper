@@ -74,8 +74,8 @@ struct mcast_info
 {
 	int	clt_id;
 	struct rdma_event_channel *channel;
-	struct sockaddr_storage dst_in[MCAST_GROUPS_PER_CLIENT];
-	struct sockaddr *dst_addr[MCAST_GROUPS_PER_CLIENT];
+	struct sockaddr_storage dst_in[MCAST_GROUPS_NUM];
+	struct sockaddr *dst_addr[MCAST_GROUPS_NUM];
 	struct sockaddr_storage src_in;
 	struct sockaddr *src_addr;
 	struct cm_qps cm_qp[MCAST_QPS];
@@ -86,8 +86,8 @@ struct mcast_info
 
 // this contains all data we need to perform our mcasts
 struct mcast_essentials {
-	struct ibv_cq *recv_cq;
-	struct ibv_qp *recv_qp;
+	struct ibv_cq *recv_cq[MCAST_QP_NUM];
+	struct ibv_qp *recv_qp[MCAST_QP_NUM];
 	struct ibv_mr *recv_mr;
 	struct ibv_ah *send_ah;
 	uint32_t qpn;
@@ -182,7 +182,7 @@ void flr_set_up_credit_WRs(struct ibv_send_wr* credit_send_wr, struct ibv_sge* c
                            struct hrd_ctrl_blk *cb, uint8_t flr_id, uint32_t max_credt_wrs, uint16_t);
 
 // Post receives for the coherence traffic in the init phase
-void pre_post_recvs(struct hrd_ctrl_blk*, uint32_t* , bool, struct mcast_essentials*, void*,
+void pre_post_recvs(uint32_t*, struct ibv_qp *, uint32_t lkey, void*,
                     uint32_t, uint32_t, uint16_t, uint32_t);
 // set up some basic leader buffers
 void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
