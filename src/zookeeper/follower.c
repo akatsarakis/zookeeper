@@ -9,12 +9,12 @@ void *follower(void *arg)
                   (machine_id * FOLLOWERS_PER_MACHINE) + params.id;
   uint8_t flr_id = machine_id > LEADER_MACHINE ? (machine_id - 1) : machine_id;
   uint16_t t_id = params.id;
-//  yellow_printf("FOLLOWER-id %d \n", flr_id);
+  if (t_id == 0) yellow_printf("FOLLOWER-id %d \n", flr_id);
   uint16_t remote_ldr_thread = t_id;
   if (ENABLE_MULTICAST == 1 && t_id == 0) {
       red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
       // TODO to fix it we must post receives seperately for acks and multicasts
-      assert(false);
+//      assert(false);
   }
   int protocol = FOLLOWER;
 
@@ -33,13 +33,13 @@ void *follower(void *arg)
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
   struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
   struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SIZE);
-//  if (t_id == 0) printf("prep buffer starts at %llu, com buffer starts at %llu \n", prep_buffer, com_buffer);
+
   /* ---------------------------------------------------------------------------
   ------------------------------MULTICAST SET UP-------------------------------
   ---------------------------------------------------------------------------*/
 
   struct mcast_info *mcast_data;
-  struct mcast_essentials *mcast;
+  struct mcast_essentials *mcast = NULL;
   // need to init mcast before sync, such that we can post recvs
   if (ENABLE_MULTICAST == 1) {
       init_multicast(&mcast_data, &mcast, t_id, cb, protocol);
@@ -47,10 +47,10 @@ void *follower(void *arg)
   }
   /* Fill the RECV queues that receive the Commits and Prepares, (we need to do this early) */
   if (WRITE_RATIO > 0) {
-    pre_post_recvs(cb, &prep_push_ptr, false, NULL, (void *) prep_buffer,
-                   FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID, FLR_PREP_RECV_SIZE);
+    pre_post_recvs(cb, &prep_push_ptr, ENABLE_MULTICAST, mcast, (void *) prep_buffer,
+                   FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID, (uint32_t)FLR_PREP_RECV_SIZE);
     pre_post_recvs(cb, &com_push_ptr, false, NULL, (void *) com_buffer,
-                   FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID, FLR_COM_RECV_SIZE);
+                   FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID, (uint32_t)FLR_COM_RECV_SIZE);
   }
   /* -----------------------------------------------------
   --------------CONNECT WITH FOLLOWERS-----------------------
@@ -75,7 +75,7 @@ void *follower(void *arg)
 
   // FC_QP_ID 2: send Credits  -- receive Credits
   struct ibv_send_wr credit_send_wr[FLR_MAX_CREDIT_WRS];
-  struct ibv_sge credit_sgl, credit_recv_sgl;
+  struct ibv_sge credit_send_sgl, credit_recv_sgl;
   struct ibv_wc credit_wc[FLR_MAX_CREDIT_RECV];
   struct ibv_recv_wr credit_recv_wr[FLR_MAX_CREDIT_RECV];
   uint16_t credits = W_CREDITS;
@@ -87,7 +87,8 @@ void *follower(void *arg)
     ws[FOLLOWERS_PER_MACHINE] = {0},	/* Window slot to use for a  LOCAL worker */
     acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
   uint32_t cmd_count = 0, credit_debug_cnt = 0, outstanding_rem_reqs = 0;
-  long long trace_iter = 0, credit_tx = 0, br_tx = 0, sent_ack_tx = 0;
+  long long trace_iter = 0, br_tx = 0, sent_ack_tx = 0;
+  long credit_tx = 0;
   //req_type measured_req_flag = NO_REQ;
   struct local_latency local_measure = {
     .measured_local_region = -1,
@@ -141,10 +142,10 @@ void *follower(void *arg)
     ---------------------------------------------------------------------------*/
   // SEND AND RECEIVE WRs
 //  set_up_remote_WRs(w_send_wr, w_send_sgl, prep_recv_wr, &prep_recv_sgl, cb, t_id, ops_mr, protocol);
-//      set_up_credits(credits, credit_send_wr, &credit_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
-    set_up_follower_WRs(ack_send_wr, ack_send_sgl, prep_recv_wr, prep_recv_sgl, w_send_wr, w_send_sgl,
-                        com_recv_wr, com_recv_sgl, remote_ldr_thread, cb, w_mr, mcast);
-
+//      set_up_credits(credits, credit_send_wr, &credit_send_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
+  set_up_follower_WRs(ack_send_wr, ack_send_sgl, prep_recv_wr, prep_recv_sgl, w_send_wr, w_send_sgl,
+                      com_recv_wr, com_recv_sgl, remote_ldr_thread, cb, w_mr, mcast);
+  flr_set_up_credit_WRs(credit_send_wr, &credit_send_sgl, cb, flr_id, FLR_MAX_CREDIT_WRS, t_id);
   // TRACE
   struct trace_command *trace;
   trace_init(&trace, t_id);
@@ -162,10 +163,10 @@ void *follower(void *arg)
   ------------------------------START LOOP--------------------------------
   ---------------------------------------------------------------------------*/
   while(1) {
-
-    flr_check_debug_cntrs(&credit_debug_cnt, &wait_for_coms_dbg_counter,
-                          &wait_for_prepares_dbg_counter,
-                          &wait_for_gid_dbg_counter, prep_buffer ,prep_pull_ptr, p_writes, t_id);
+    if (t_stats[t_id].received_preps_mes_num > 0)
+      flr_check_debug_cntrs(&credit_debug_cnt, &wait_for_coms_dbg_counter,
+                            &wait_for_prepares_dbg_counter,
+                            &wait_for_gid_dbg_counter, prep_buffer ,prep_pull_ptr, p_writes, t_id);
 
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------
@@ -186,7 +187,7 @@ void *follower(void *arg)
     ---------------------------------------------------------------------------*/
 
     poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, cb->dgram_recv_cq[COMMIT_W_QP_ID],
-                  com_recv_wc, com_recv_info, t_id, flr_id, &wait_for_coms_dbg_counter);
+                  com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx, t_id, flr_id, &wait_for_coms_dbg_counter);
 
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------

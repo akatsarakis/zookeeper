@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 //Global Vars
-uint8_t protocol;
+//uint8_t protocol;
 optik_lock_t kv_lock;
 uint32_t* latency_counters;
 struct latency_counters latency_count;
@@ -69,6 +69,8 @@ int main(int argc, char *argv[])
   cyan_printf("PREPARE CREDITS %d, FLR PREPARE BUF SLOTS %d, FLR PREPARE BUF SIZE %d\n",
               PREPARE_CREDITS, FLR_PREP_BUF_SLOTS, FLR_PREP_BUF_SIZE);
 
+  yellow_printf("Using Qourom %d , Quorum Machines %d \n", USE_QUORUM, LDR_QUORUM_OF_ACKS);
+
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);
@@ -80,6 +82,7 @@ int main(int argc, char *argv[])
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
   assert(sizeof(struct prep_message_ud_req) == FLR_PREP_RECV_SIZE);
   assert(SESSIONS_PER_THREAD < M_16);
+  assert(FLR_MAX_RECV_COM_WRS >= FLR_CREDITS_IN_MESSAGE);
 
 
 //

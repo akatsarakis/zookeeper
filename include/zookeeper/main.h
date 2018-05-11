@@ -75,7 +75,7 @@
 #define FOLLOWER 1
 #define LEADER 2
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 20
+#define SESSIONS_PER_THREAD 100
 
 
 /*-------------------------------------------------
@@ -185,8 +185,8 @@
 	-----------------CONSISTENCY-------------------------
 --------------------------------------------------*/
 //----MULTICAST
-#define ENABLE_MULTICAST 0
-#define MULTICAST_TESTING_ 0
+#define ENABLE_MULTICAST 1
+#define MULTICAST_TESTING_ 1
 #define MULTICAST_TESTING (ENABLE_MULTICAST == 1 ? MULTICAST_TESTING_ : 0)
 #define SEND_MCAST_QP 0
 #define RECV_MCAST_QP 1
@@ -238,7 +238,7 @@
 
 //--------LEADER Flow Control
 #define PREPARE_CREDITS 15
-#define COMMIT_CREDITS 15
+#define COMMIT_CREDITS 30
 #define BCAST_CREDITS (PREPARE_CREDITS + COMMIT_CREDITS)
 #define LDR_PREPOST_RECEIVES_NUM (W_CREDITS * FOLLOWER_MACHINE_NUM)
 #define MAX_OF_CREDITS MAX(W_CREDITS, PREPARE_CREDITS)
@@ -251,9 +251,9 @@
 #define FLR_VC_NUM 2
 #define ACK_VC 0
 #define W_VC 1
-#define LDR_CREDIT_DIVIDER (W_CREDITS)
+#define LDR_CREDIT_DIVIDER (1)
 #define LDR_CREDITS_IN_MESSAGE (W_CREDITS / LDR_CREDIT_DIVIDER)
-#define FLR_CREDIT_DIVIDER (LDR_CREDIT_DIVIDER)
+#define FLR_CREDIT_DIVIDER (2)
 #define FLR_CREDITS_IN_MESSAGE (COMMIT_CREDITS / FLR_CREDIT_DIVIDER)
 
 // if this is smaller than MAX_BCAST_BATCH + 2 it will deadlock because the signaling messaged is polled before actually posted
@@ -263,7 +263,10 @@
 
 
 // -------ACKS-------------
-#define LDR_QUORUM_OF_ACKS (FOLLOWER_MACHINE_NUM)
+#define USE_QUORUM 0
+#define QUORUM_NUM (CEILING(MACHINE_NUM, 2))
+#define LDR_QUORUM_OF_ACKS (USE_QUORUM == 1 ? (QUORUM_NUM - 1): FOLLOWER_MACHINE_NUM) //()
+
 #define MAX_LIDS_IN_AN_ACK K_64_
 #define ACK_SIZE 12
 //#define MAX_ACK_COALESCE 5
@@ -273,7 +276,7 @@
 
 
 // -- COMMITS-----
-#define MAX_LIDS_IN_A_COMMIT K_64_
+
 #define COM_SIZE 8 // gid(8)
 #define COM_MES_HEADER_SIZE 4 // opcode + coalesce num
 //#define MAX_COM_COALESCE 2
@@ -321,7 +324,7 @@
 #define FLR_MAX_W_WRS (W_CREDITS)
 #define FLR_MAX_RECV_COM_WRS (COMMIT_CREDITS)
 // Credits WRs
-#define FLR_MAX_CREDIT_WRS (COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE )
+#define FLR_MAX_CREDIT_WRS 1 //(COMMIT_CREDITS / FLR_CREDITS_IN_MESSAGE )
 #define FLR_MAX_CREDIT_RECV (W_CREDITS / LDR_CREDITS_IN_MESSAGE)
 #define ACK_SEND_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_ACK_WRS + 2))
 
@@ -350,11 +353,13 @@
 
 #define FLR_PENDING_WRITES (2 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
 #define FLR_DISALLOW_OUT_OF_ORDER_PREPARES 1
+
+#define MAX_LIDS_IN_A_COMMIT MIN(FLR_PENDING_WRITES, LEADER_PENDING_WRITES)
 /*-------------------------------------------------
 -----------------QUEUE DEPTHS-------------------------
 --------------------------------------------------*/
 
-
+#define COM_CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_CREDIT_WRS + 1))
 
 
 #define LEADER_QP_NUM 3 /* The number of QPs for the leader */
@@ -395,6 +400,8 @@
 
 // DEBUG
 #define DEBUG_PREPARES 0
+#define DEBUG_ACKS 0
+#define FLR_CHECK_DBG_COUNTERS 0
 
 
 
@@ -529,9 +536,9 @@ struct remote_qp {
 };
 
 /*
- *  SENT means we sent the prepare message
- *  READY means all acks have been gathered
- *  SEND_COMMITS mens it has been propagated to the
+ *  SENT means we sent the prepare message // OR an ack has been sent
+ *  READY means all acks have been gathered // OR a commit has been received
+ *  SEND_COMMITS menas it has been propagated to the
  *  cache and commits should be sent out
  * */
 enum write_state {INVALID, VALID, SENT, READY, SEND_COMMITTS};
@@ -646,6 +653,7 @@ struct pending_writes {
 	uint32_t unordered_ptr;
 	uint8_t *flr_id;
 	uint8_t *acks_seen;
+//  uint8_t *ack_bit_vectors;
 	bool *is_local;
 	bool *session_has_pending_write;
 	bool all_sessions_stalled;
@@ -799,7 +807,7 @@ struct local_latency {
 	char* flag_to_poll;
 };
 
-extern uint8_t protocol;
+//extern uint8_t protocol;
 extern optik_lock_t kv_lock;
 extern struct latency_counters latency_count;
 

@@ -214,6 +214,7 @@ void window_stats(struct extended_cache_op *op, struct mica_resp *resp) {
 
 //assuming microsecond latency
 void print_latency_stats(void){
+    uint8_t protocol = LEADER;
     FILE *latency_stats_fd;
     int i = 0;
     char filename[128];

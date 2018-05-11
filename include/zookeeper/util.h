@@ -177,6 +177,10 @@ void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_se
                          struct hrd_ctrl_blk *cb, struct ibv_mr *w_mr,
                          struct mcast_essentials *mcast);
 
+// Follower sends credits for commits
+void flr_set_up_credit_WRs(struct ibv_send_wr* credit_send_wr, struct ibv_sge* credit_send_sgl,
+                           struct hrd_ctrl_blk *cb, uint8_t flr_id, uint32_t max_credt_wrs, uint16_t);
+
 // Post receives for the coherence traffic in the init phase
 void pre_post_recvs(struct hrd_ctrl_blk*, uint32_t* , bool, struct mcast_essentials*, void*,
                     uint32_t, uint32_t, uint16_t, uint32_t);

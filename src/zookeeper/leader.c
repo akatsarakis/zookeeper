@@ -141,8 +141,9 @@ void *leader(void *arg)
   // such that we can interpret the incoming acks correctly
   struct fifo *remote_prep_buf;
   init_fifo(&remote_prep_buf, FLR_PREP_BUF_SLOTS * sizeof(uint32_t), FOLLOWER_MACHINE_NUM);
-  uint32_t *fifo = (uint32_t *)remote_prep_buf->fifo;
+  uint32_t *fifo = (uint32_t *)remote_prep_buf[FOLLOWER_MACHINE_NUM -1].fifo;
   assert(fifo[FLR_PREP_BUF_SLOTS -1] == 0);
+
 	/* ---------------------------------------------------------------------------
 	------------------------------INITIALIZE STATIC STRUCTUREs--------------------
 		---------------------------------------------------------------------------*/

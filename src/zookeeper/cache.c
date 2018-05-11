@@ -605,7 +605,7 @@ void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **op,
 /* This is used to propagate the incoming updates that are sized according to the key-value size
  *  Unused parts are stripped!! */
 void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp) {
-	protocol = FOLLOWER;
+//	protocol = FOLLOWER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -719,7 +719,7 @@ void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op 
  * The size of the op depends both on the key-value size and on the coalescing degree */
 void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op,
 											  struct mica_resp *resp) {
-	protocol=LEADER;
+//	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -1013,7 +1013,7 @@ void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct 
  * Unused parts are stripped!! */
 void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op,
 															struct mica_resp *resp) {
-	protocol=LEADER;
+//	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1
@@ -1161,7 +1161,7 @@ void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thre
  * Unused parts are stripped!! */
 void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op,
 																  struct mica_resp *resp) {
-	protocol=LEADER;
+//	protocol=LEADER;
 	int I, j;	/* I is batch index */
 	long long stalled_brces = 0;
 #if CACHE_DEBUG == 1

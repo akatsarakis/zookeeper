@@ -472,7 +472,7 @@ void trace_init(struct trace_command **cmds, int g_id) {
 }
 
 void dump_stats_2_file(struct stats* st){
-    uint8_t typeNo = protocol;
+    uint8_t typeNo =LEADER;
     assert(typeNo >=0 && typeNo <=3);
     int i = 0;
     char filename[128];
@@ -623,33 +623,7 @@ void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essenti
     }
 }
 
-// Initialize the mcast_essentials structure that is necessary
-void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mcast,
-                    int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
-{
-    check_protocol(protocol);
-    uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
-                                (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
-    size_t dgram_buf_size = (size_t) (protocol == FOLLOWER ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
-    int recv_q_depth = protocol == FOLLOWER ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
-    *mcast_data = malloc(sizeof(struct mcast_info));
-    (*mcast_data)->clt_id = local_client_id;
-    setup_multicast(*mcast_data, recv_q_depth);
-    // char buf[40];
-    // inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, buf, 40);
-    // printf("client: joined dgid: %s mlid 0x%x sl %d\n", buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
-    *mcast = malloc(sizeof(struct mcast_essentials));
-    (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
-    (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
-    (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
-    (*mcast)->recv_cq = (*mcast_data)->cm_qp[RECV_MCAST_QP].cq;
-    (*mcast)->recv_qp = (*mcast_data)->cm_qp[RECV_MCAST_QP].cma_id->qp;
-    (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[RECV_MCAST_QP].pd, (void*) cb->dgram_buf,
-                                   dgram_buf_size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
-                                                   IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
-    free(*mcast_data);
-    assert((*mcast)->recv_mr != NULL);
-}
+
 
 // set the different queue depths for client's queue pairs
 void set_up_queue_depths(int** recv_q_depths, int** send_q_depths, int protocol)
@@ -981,8 +955,8 @@ void init_fifo(struct fifo **fifo, uint32_t max_size, uint32_t fifos_num)
   (*fifo) = (struct fifo *)malloc(fifos_num * sizeof(struct fifo));
   memset((*fifo), 0, fifos_num *  sizeof(struct fifo));
   for (int i = 0; i < fifos_num; ++i) {
-    fifo[i]->fifo = malloc(max_size);
-    memset(fifo[i]->fifo, 0, max_size);
+    (*fifo)[i].fifo = malloc(max_size);
+    memset((*fifo)[i].fifo, 0, max_size);
   }
 
 
@@ -1017,12 +991,14 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
   (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
   (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
   (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+//  (*p_writes)->ack_bit_vectors = (uint8_t)malloc(size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
   (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
   (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
   (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
   (*p_writes)->ptrs_to_ops = (struct prepare**) malloc(size * sizeof(struct prepare*));
 
   memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
+//  memset((*p_writes)->ack_bit_vectors, 0, size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
   (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
   memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
   (*p_writes)->prep_fifo->prep_message =
@@ -1172,6 +1148,7 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
     //prep_send_sgl[j].addr = (uint64_t) (uintptr_t) (buf + j);
     if (LEADER_PREPARE_ENABLE_INLINING == 0) prep_send_sgl[j].lkey = prep_mr->lkey;
     if (!COM_ENABLE_INLINING) com_send_sgl[j].lkey = com_mr->lkey;
+
     for (i = 0; i < MESSAGES_IN_BCAST; i++) {
       uint16_t rm_id = i;
       uint16_t index = (j * MESSAGES_IN_BCAST) + i;
@@ -1185,10 +1162,10 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
         prep_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].ah;
         prep_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].qpn;
         prep_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-        com_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].ah;
-        com_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].qpn;
-        com_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
       }
+      com_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].ah;
+      com_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].qpn;
+      com_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
       prep_send_wr[index].opcode = IBV_WR_SEND;
       prep_send_wr[index].num_sge = 1;
       prep_send_wr[index].sg_list = &prep_send_sgl[j];
@@ -1313,6 +1290,26 @@ void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_se
 }
 
 
+void flr_set_up_credit_WRs(struct ibv_send_wr* credit_send_wr, struct ibv_sge* credit_send_sgl,
+                           struct hrd_ctrl_blk *cb, uint8_t flr_id, uint32_t max_credt_wrs, uint16_t t_id)
+{
+  // Credit WRs
+  for (uint32_t i = 0; i < max_credt_wrs; i++) {
+    credit_send_sgl->length = 0;
+    credit_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
+    credit_send_wr[i].num_sge = 0;
+    credit_send_wr[i].sg_list = credit_send_sgl;
+    credit_send_wr[i].imm_data = (uint32) flr_id;
+    credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+    credit_send_wr[i].next = NULL;
+    credit_send_wr[i].send_flags = IBV_SEND_INLINE;
+    credit_send_wr[i].wr.ud.ah = remote_leader_qp[t_id][FC_QP_ID].ah;
+    credit_send_wr[i].wr.ud.remote_qpn = (uint32_t) remote_leader_qp[t_id][FC_QP_ID].qpn;
+  }
+}
+
+
+
 /* ---------------------------------------------------------------------------
 ------------------------------UTILITY --------------------------------------
 ---------------------------------------------------------------------------*/
@@ -1327,6 +1324,36 @@ void check_protocol(int protocol)
 /* ---------------------------------------------------------------------------
 ------------------------------MULTICAST --------------------------------------
 ---------------------------------------------------------------------------*/
+
+// Initialize the mcast_essentials structure that is necessary
+void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mcast,
+                    int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
+{
+  check_protocol(protocol);
+  uint16_t remote_buf_size =  ENABLE_WORKER_COALESCING == 1 ?
+                              (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE;
+  size_t dgram_buf_size = (size_t) (protocol == FOLLOWER ? SC_CLT_BUF_SIZE + remote_buf_size : LIN_CLT_BUF_SIZE + remote_buf_size);
+  int recv_q_depth = protocol == FOLLOWER ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
+  *mcast_data = malloc(sizeof(struct mcast_info));
+  (*mcast_data)->clt_id = local_client_id;
+  setup_multicast(*mcast_data, recv_q_depth);
+  // char buf[40];
+  // inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, buf, 40);
+  // printf("client: joined dgid: %s mlid 0x%x sl %d\n", buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
+  *mcast = malloc(sizeof(struct mcast_essentials));
+  (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
+  (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
+  (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
+  (*mcast)->recv_cq = (*mcast_data)->cm_qp[RECV_MCAST_QP].cq;
+  (*mcast)->recv_qp = (*mcast_data)->cm_qp[RECV_MCAST_QP].cma_id->qp;
+  (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[RECV_MCAST_QP].pd, (void*) cb->dgram_buf,
+                                 dgram_buf_size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
+                                                 IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
+  free(*mcast_data);
+  assert((*mcast)->recv_mr != NULL);
+}
+
+
 // wrapper around getaddrinfo socket function
 int get_addr(char *dst, struct sockaddr *addr)
 {
