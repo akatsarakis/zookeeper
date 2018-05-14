@@ -105,24 +105,12 @@ void *follower(void *arg)
   if (MEASURE_LATENCY && t_id == 0)
       latency_info.key_to_measure = malloc(sizeof(struct cache_key));
 
+  struct mica_resp *resp;
+  struct ibv_mr *w_mr;
+  struct cache_op *ops;
 
-
-
-
-  struct mica_op *coh_buf;
-  struct cache_op *update_ops, *ack_bcast_ops;
-  struct small_cache_op *inv_ops, *inv_to_send_ops;
-  struct key_home *key_homes, *next_key_homes, *third_key_homes;
-  struct mica_resp *resp, *next_resp, *third_resp;
-  struct mica_resp update_resp[BCAST_TO_CACHE_BATCH] = {0}, inv_resp[BCAST_TO_CACHE_BATCH];
-  struct ibv_mr *ops_mr, *w_mr;
-  struct extended_cache_op *ops, *next_ops, *third_ops;
-//  set_up_ops(&ops, &next_ops, &third_ops, &resp, &next_resp, &third_resp,
-//             &key_homes, &next_key_homes, &third_key_homes);
-  resp = (struct mica_resp *)malloc(FLR_PENDING_WRITES * sizeof(struct mica_resp));
-  set_up_coh_ops(&update_ops, &ack_bcast_ops, &inv_ops, &inv_to_send_ops, update_resp, inv_resp, &coh_buf, protocol);
-  set_up_mrs(&ops_mr, &w_mr, ops, coh_buf, cb);
-  uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
+  ops = (struct cache_op *)memalign(4096, CACHE_BATCH_SIZE *  sizeof(struct cache_op));
+  resp = (struct mica_resp *)malloc(CACHE_BATCH_SIZE * sizeof(struct mica_resp));
   struct recv_info *prep_recv_info, *com_recv_info;
   init_recv_info(&prep_recv_info, prep_push_ptr, FLR_PREP_BUF_SLOTS,
                  (uint32_t) FLR_PREP_RECV_SIZE, FLR_MAX_RECV_PREP_WRS, prep_recv_wr,
@@ -135,15 +123,14 @@ void *follower(void *arg)
   struct pending_acks *p_acks = (struct pending_acks *) malloc(sizeof(struct pending_acks));
   struct ack_message *ack = (struct ack_message *)malloc(sizeof(struct ack_message));
   memset(p_acks, 0, sizeof(struct pending_acks));
-  set_up_pending_writes(&p_writes, FLR_PENDING_WRITES);
-
+  set_up_pending_writes(&p_writes, FLR_PENDING_WRITES, protocol);
+  if (!FLR_W_ENABLE_INLINING)
+    w_mr = register_buffer(cb->pd, p_writes->w_fifo->fifo, W_FIFO_SIZE * sizeof(struct w_message));
 
   /* ---------------------------------------------------------------------------
   ------------------------------INITIALIZE STATIC STRUCTUREs--------------------
     ---------------------------------------------------------------------------*/
   // SEND AND RECEIVE WRs
-//  set_up_remote_WRs(w_send_wr, w_send_sgl, prep_recv_wr, &prep_recv_sgl, cb, t_id, ops_mr, protocol);
-//      set_up_credits(credits, credit_send_wr, &credit_send_sgl, credit_recv_wr, &credit_recv_sgl, cb, protocol);
   set_up_follower_WRs(ack_send_wr, ack_send_sgl, prep_recv_wr, prep_recv_sgl, w_send_wr, w_send_sgl,
                       com_recv_wr, com_recv_sgl, remote_ldr_thread, cb, w_mr, mcast);
   flr_set_up_credit_WRs(credit_send_wr, &credit_send_sgl, cb, flr_id, FLR_MAX_CREDIT_WRS, t_id);
@@ -176,7 +163,6 @@ void *follower(void *arg)
                       prep_recv_wc, prep_recv_info, t_id, flr_id, &wait_for_prepares_dbg_counter);
 
 
-
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
@@ -200,57 +186,20 @@ void *follower(void *arg)
   ------------------------------PROBE THE CACHE--------------------------------------
   ---------------------------------------------------------------------------*/
 
-//      // Propagate the updates before probing the cache
-//      trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
-//                                             resp, key_homes, 0, next_op_i,
-//                                             &latency_info, &start, hottest_keys_pointers);
+  // Propagate the updates before probing the cache
+    trace_iter = flr_batch_from_trace_to_cache(trace_iter, t_id, trace, ops, flr_id,
+                                               p_writes, resp, &latency_info, &start);
 
 
 
   /* ---------------------------------------------------------------------------
-  ------------------------------SEND INVS TO THE CACHE---------------------------
-  ---------------------------------------------------------------------------*/
-  // As the beetles did not say "all we are saying, is give reads a chance"
-//  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-//    if (inv_ops_i > 0) {
-//      // Proapagate the invalidations to the cache
-//      cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(inv_ops_i, t_id, &inv_ops,
-//                                     inv_resp);
-//      /* Create an array with acks to send out such that we send answers only
-//       to the invalidations that succeeded, take care to keep the back pressure:
-//       invs that failed trigger credits to be sent back, successful invs still
-//       hold buffer space though */
-//
-//      invs_bookkeeping(inv_ops_i, inv_resp, coh_message_count, inv_ops,
-//               inv_to_send_ops, &inv_push_ptr, &inv_size, &debug_ptr);
-//    }
-//  }
-
-  /* ---------------------------------------------------------------------------
-  ------------------------------ACKNOWLEDGEMENTS--------------------------------
+  ------------------------------SEND WRITES TO THE LEADER---------------------------
   ---------------------------------------------------------------------------*/
 
-//  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0)
-//    if (inv_size > 0)
-//      send_acks(inv_to_send_ops, credits, credit_wc, ack_wr, ack_sgl, &sent_ack_tx, &inv_size,
-//            &ack_recv_counter, credit_recv_wr, t_id, coh_message_count, cb, debug_ptr);
 
-  /* ---------------------------------------------------------------------------
-  ------------------------------SEND CREDITS--------------------------------
-  ---------------------------------------------------------------------------*/
-  if (WRITE_RATIO > 0 && DISABLE_CACHE == 0) {
-    /* Find out how many buffer slots have been emptied and create the appropriate
-      credit messages, for the different types of buffers (Acks, Invs, Upds)
-      If credits must be sent back, then receives for new coherence messages have to be posted first*/
-//    credit_wr_i = forge_credits_LIN(coh_message_count, acks_seen, invs_seen, upds_seen, t_id,
-//                    credit_wr, &credit_tx,
-//                    cb, coh_recv_cq, coh_wc);
-//    if (credit_wr_i > 0)
-//      send_credits(credit_wr_i, coh_recv_sgl, cb, &prep_push_ptr, coh_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
-//             credit_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)prep_buffer);
-  }
-      op_i = 0; bool is_leader_t = false;
-//      run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
+
+
+
   }
   return NULL;
 }

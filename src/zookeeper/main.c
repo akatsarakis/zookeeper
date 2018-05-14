@@ -63,6 +63,10 @@ int main(int argc, char *argv[])
                 sizeof(struct prepare), PREP_SIZE,
                 sizeof(struct prep_message), LDR_PREP_SEND_SIZE,
                 sizeof(struct prep_message_ud_req), FLR_PREP_RECV_SIZE);
+  cyan_printf("Write: write %lu/%d, write message %lu/%d, write message ud req %llu/%d\n",
+              sizeof(struct write), W_SIZE,
+              sizeof(struct w_message), FLR_W_SEND_SIZE,
+              sizeof(struct w_message_ud_req), LDR_W_RECV_SIZE);
 
   green_printf("LEADER PREPARE INLINING %d, LEADER PENDING WRITES %d \n",
 							 LEADER_PREPARE_ENABLE_INLINING, LEADER_PENDING_WRITES);
@@ -82,6 +86,7 @@ int main(int argc, char *argv[])
   assert(sizeof(struct ack_message_ud_req) == LDR_ACK_RECV_SIZE);
   assert(sizeof(struct com_message_ud_req) == FLR_COM_RECV_SIZE);
   assert(sizeof(struct prep_message_ud_req) == FLR_PREP_RECV_SIZE);
+  assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(SESSIONS_PER_THREAD < M_16);
   assert(FLR_MAX_RECV_COM_WRS >= FLR_CREDITS_IN_MESSAGE);
 

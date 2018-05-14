@@ -981,28 +981,27 @@ void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slo
 
 
 // Set up a struct that stores pending writes
-void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
-{
+void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int protocol) {
   int i;
-  (*p_writes) = (struct pending_writes*) malloc(sizeof(struct pending_writes));
+  (*p_writes) = (struct pending_writes *) malloc(sizeof(struct pending_writes));
   memset((*p_writes), 0, sizeof(struct pending_writes));
   //(*p_writes)->write_ops = (struct write_op*) malloc(size * sizeof(struct write_op));
-  (*p_writes)->g_id = (uint64_t*) malloc(size * sizeof(uint64_t));
-  (*p_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-  (*p_writes)->session_id = (uint32_t*) malloc(size * sizeof(uint32_t));
-  (*p_writes)->acks_seen = (uint8_t*) malloc(size * sizeof(uint8_t));
+  (*p_writes)->g_id = (uint64_t *) malloc(size * sizeof(uint64_t));
+  (*p_writes)->w_state = (enum write_state *) malloc(size * sizeof(enum write_state));
+  (*p_writes)->session_id = (uint32_t *) malloc(size * sizeof(uint32_t));
+  (*p_writes)->acks_seen = (uint8_t *) malloc(size * sizeof(uint8_t));
 //  (*p_writes)->ack_bit_vectors = (uint8_t)malloc(size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
-  (*p_writes)->flr_id = (uint8_t*) malloc(size * sizeof(uint8_t));
-  (*p_writes)->is_local = (bool*) malloc(size * sizeof(bool));
-  (*p_writes)->session_has_pending_write = (bool*) malloc(SESSIONS_PER_THREAD * sizeof(bool));
-  (*p_writes)->ptrs_to_ops = (struct prepare**) malloc(size * sizeof(struct prepare*));
-
+  (*p_writes)->flr_id = (uint8_t *) malloc(size * sizeof(uint8_t));
+  (*p_writes)->is_local = (bool *) malloc(size * sizeof(bool));
+  (*p_writes)->session_has_pending_write = (bool *) malloc(SESSIONS_PER_THREAD * sizeof(bool));
+  (*p_writes)->ptrs_to_ops = (struct prepare **) malloc(size * sizeof(struct prepare *));
+  if (protocol == FOLLOWER) init_fifo(&((*p_writes)->w_fifo), W_FIFO_SIZE * sizeof(struct w_message), 1);
   memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
 //  memset((*p_writes)->ack_bit_vectors, 0, size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
   (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
   memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
   (*p_writes)->prep_fifo->prep_message =
-    (struct prep_message*) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
+    (struct prep_message *) malloc(PREP_FIFO_SIZE * sizeof(struct prep_message));
   memset((*p_writes)->prep_fifo->prep_message, 0, PREP_FIFO_SIZE * sizeof(struct prep_message));
   //init_fifo(&(*p_writes)->prep_fifo, PREP_FIFO_SIZE * sizeof(struct prep_message));
   assert((*p_writes)->prep_fifo != NULL);
@@ -1013,32 +1012,26 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size)
   for (i = 0; i < size; i++) {
     (*p_writes)->w_state[i] = INVALID;
   }
-  struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
-  for (i = 0; i < PREP_FIFO_SIZE; i++) {
+  if (protocol == LEADER) {
+    struct prep_message *preps = (*p_writes)->prep_fifo->prep_message;
+    for (i = 0; i < PREP_FIFO_SIZE; i++) {
       preps[i].opcode = CACHE_OP_PUT;
-      for(uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
-          preps[i].prepare[j].opcode = CACHE_OP_PUT;
-          preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+      for (uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
+        preps[i].prepare[j].opcode = CACHE_OP_PUT;
+        preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
       }
+    }
+  } else { // PROTOCOL = FOLLOWER
+    struct w_message *writes = (struct w_message *) (*p_writes)->w_fifo->fifo;
+    for (i = 0; i < W_FIFO_SIZE; i++) {
+      for (uint16_t j = 0; j < MAX_W_COALESCE; j++) {
+        writes[i].write[j].opcode = CACHE_OP_PUT;
+        writes[i].write[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+      }
+    }
   }
 }
 
-
-// Set up a struct that stores pending writes
-void set_up_completed_writes(struct completed_writes **c_writes, uint32_t size)
-{
-  int i;
-  (*c_writes)->w_ops = (struct write_op**) malloc(size * sizeof(struct write_op*));
-  (*c_writes)->w_state = (enum write_state*) malloc(size * sizeof(enum write_state));
-  (*c_writes)->p_writes_ptr = (uint32_t*) malloc(size * sizeof(uint32_t));
-  memset((*c_writes)->w_ops, 0, size * sizeof(struct write_op));
-  memset((*c_writes)->p_writes_ptr, 0, size * sizeof(uint32_t));
-  (*c_writes)->push_ptr = 0;
-  (*c_writes)->pull_ptr = 0;
-  for (i = 0; i < size; i++) {
-    (*c_writes)->w_state[i] = INVALID;
-  }
-}
 
 
 // set the different queue depths for client's queue pairs
@@ -1255,7 +1248,7 @@ void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_se
     for (i = 0; i < FLR_MAX_W_WRS; ++i) {
         w_send_wr[i].wr.ud.ah = remote_leader_qp[remote_thread][COMMIT_W_QP_ID].ah;
         w_send_wr[i].wr.ud.remote_qpn = (uint32) remote_leader_qp[remote_thread][COMMIT_W_QP_ID].qpn;
-        if (FLR_PREPARE_ENABLE_INLINING) w_send_wr[i].send_flags = IBV_SEND_INLINE;
+        if (FLR_W_ENABLE_INLINING) w_send_wr[i].send_flags = IBV_SEND_INLINE;
         else {
             w_send_sgl[i].lkey = w_mr->lkey;
             w_send_wr[i].send_flags = 0;

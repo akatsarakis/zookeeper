@@ -158,10 +158,7 @@ void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slo
                     struct ibv_qp * recv_qp, struct ibv_sge* recv_sgl, void* buf);
 
 // Set up a struct that stores pending writes
-void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size);
-// Set up a struct that points to completed writes
-void set_up_completed_writes(struct completed_writes**, uint32_t);
-
+void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int);
 
 // Set up all leader WRs
 void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,

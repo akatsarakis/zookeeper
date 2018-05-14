@@ -19,9 +19,9 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 10
+#define FOLLOWERS_PER_MACHINE 1
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
-#define MACHINE_NUM 3
+#define MACHINE_NUM 2
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 
@@ -269,7 +269,7 @@
 
 // -------ACKS-------------
 #define USE_QUORUM 1
-#define QUORUM_NUM (CEILING(MACHINE_NUM, 2))
+#define QUORUM_NUM ((MACHINE_NUM / 2) + 1)
 #define LDR_QUORUM_OF_ACKS (USE_QUORUM == 1 ? (QUORUM_NUM - 1): FOLLOWER_MACHINE_NUM) //()
 
 #define MAX_LIDS_IN_AN_ACK K_64_
@@ -293,11 +293,10 @@
 //---WRITES---
 #define MAX_W_COALESCE 1
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
-#define SINGLE_WRITE_PAYLOAD (VALUE_SIZE + WRITE_HEADER)
-#define WRITE_MESSAGES_VALUE_SIZE (MAX_W_COALESCE * SINGLE_WRITE_PAYLOAD)
-#define FLR_W_SEND_SIZE (WRITE_MESSAGES_VALUE_SIZE)
+#define W_SIZE (VALUE_SIZE + WRITE_HEADER)
+#define FLR_W_SEND_SIZE (MAX_W_COALESCE * W_SIZE)
 #define LDR_W_RECV_SIZE (GRH_SIZE + FLR_W_SEND_SIZE)
-#define FLR_PREPARE_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
+#define FLR_W_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
 #define MAX_PREP_COALESCE 12
@@ -355,7 +354,7 @@
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
 #define FLR_BUF_SIZE (FLR_PREP_BUF_SIZE + FLR_COM_BUF_SIZE)
 #define FLR_BUF_SLOTS (FLR_PREP_BUF_SLOTS + FLR_COM_BUF_SLOTS)
-
+#define W_FIFO_SIZE (SESSIONS_PER_THREAD)
 #define FLR_PENDING_WRITES (2 * PREPARE_CREDITS * MAX_PREP_COALESCE) // 2/3 of the buffer
 #define FLR_DISALLOW_OUT_OF_ORDER_PREPARES 1
 
@@ -365,7 +364,7 @@
 --------------------------------------------------*/
 
 #define COM_CREDIT_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_CREDIT_WRS + 1))
-
+#define WRITE_SS_BATCH MAX(MIN_SS_BATCH, (FLR_MAX_W_WRS + 1))
 
 #define LEADER_QP_NUM 3 /* The number of QPs for the leader */
 #define PREP_ACK_QP_ID 0
@@ -406,6 +405,7 @@
 // DEBUG
 #define DEBUG_PREPARES 0
 #define DEBUG_ACKS 0
+#define DEBUG_WRITES 1
 #define FLR_CHECK_DBG_COUNTERS 0
 
 
@@ -614,6 +614,32 @@ struct prep_message_ud_req {
 	uint8_t grh[GRH_SIZE];
 	struct prep_message prepare;
 };
+
+
+struct write {
+  uint8_t w_num; // the first write holds the coalesce number for the entire message
+  uint8_t flr_id;
+  uint8_t unused[2];
+  uint8_t session_id[4];
+  uint8_t key[TRUE_KEY_SIZE];	/* 8B */
+  uint8_t opcode;
+  uint8_t val_len;
+  uint8_t value[VALUE_SIZE];
+};
+
+struct w_message {
+  struct write write[MAX_W_COALESCE];
+};
+
+
+struct w_message_ud_req {
+//  struct ibv_grh grh; // compiler puts padding with this
+  uint8_t unused[GRH_SIZE];
+  struct w_message w_mes;
+};
+
+
+
 // The entires in the commit prep_message are distinct batches of commits
 struct commit_fifo {
   struct com_message *commits;
@@ -647,6 +673,7 @@ struct prep_fifo {
 struct pending_writes {
 	uint64_t *g_id;
 	struct prep_fifo *prep_fifo;
+  struct fifo *w_fifo;
 	struct prepare **ptrs_to_ops;
 	uint64_t local_w_id;
 	uint32_t *session_id;
@@ -664,21 +691,6 @@ struct pending_writes {
 	bool all_sessions_stalled;
 };
 
-//// follower pending writes
-//struct flr_p_writes {
-//	uint64_t *g_id;
-//	struct cache_op **ptrs_to_ops;
-//	uint64_t local_w_id;
-//	uint32_t *session_id;
-//	enum write_state *w_state;
-//	uint32_t push_ptr;
-//	uint32_t pull_ptr;
-//	uint32_t size;
-//	uint8_t *flr_id;
-//	bool *is_local;
-//	bool *session_has_pending_write;
-//	bool all_sessions_stalled;
-//};
 
 // struct for the follower to keep track of the acks it has sent
 struct pending_acks {
@@ -699,24 +711,7 @@ struct recv_info {
 
 };
 
-struct w_message {
-  uint8_t flr_id[4];
-  uint8_t session_id[4];
-  uint8_t key[TRUE_KEY_SIZE];	/* 8B */
-  uint8_t opcode;
-  uint8_t w_num;
-  uint8_t value[VALUE_SIZE];
-};
 
-//struct w_message {
-//  struct write w[MAX_W_COALESCE];
-//};
-
-struct w_message_ud_req {
-//  struct ibv_grh grh; // compiler puts padding with this
-	uint8_t unused[GRH_SIZE];
-  struct w_message writes[MAX_W_COALESCE];
-};
 
 struct thread_stats { // 2 cache lines
 	long long cache_hits_per_thread;
@@ -726,18 +721,23 @@ struct thread_stats { // 2 cache lines
 	long long preps_sent;
 	long long acks_sent;
 	long long coms_sent;
+  long long writes_sent;
 
   long long preps_sent_mes_num;
   long long acks_sent_mes_num;
   long long coms_sent_mes_num;
+  long long writes_sent_mes_num;
+
 
   long long received_coms;
 	long long received_acks;
 	long long received_preps;
+  long long received_writes;
 
   long long received_coms_mes_num;
   long long received_acks_mes_num;
   long long received_preps_mes_num;
+  long long received_writes_mes_num;
 
 	long long remote_messages_per_client;
 	long long cold_keys_per_trace;

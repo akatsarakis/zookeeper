@@ -30,7 +30,7 @@ void *leader(void *arg)
   uint32_t ack_buf_push_ptr = 0, ack_buf_pull_ptr = 0;
   uint32_t w_buf_push_ptr = 0, w_buf_pull_ptr = 0;
   struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf); // leave a slot for the credits
-  struct w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+  volatile struct  w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
 //  if (t_id == 0) printf("ack buffer starts at %llu, w buffer starts at %llu\n", ack_buffer, w_buffer);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
@@ -112,10 +112,6 @@ void *leader(void *arg)
 		latency_info.key_to_measure = malloc(sizeof(struct cache_key));
 
 
-  // TODO DEPRICATE THOSE TWO
-//	struct ibv_cq *coh_recv_cq = ENABLE_MULTICAST == 1 ? mcast->recv_cq : cb->dgram_recv_cq[BROADCAST_UD_QP_ID];
-//	struct ibv_qp *coh_recv_qp = ENABLE_MULTICAST == 1 ? mcast->recv_qp : cb->dgram_qp[BROADCAST_UD_QP_ID];
-
 	struct mica_op *coh_buf;
 	struct cache_op *ack_bcast_ops, *ops;
   struct commit_fifo *com_fifo;
@@ -131,7 +127,7 @@ void *leader(void *arg)
 
 	uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
   struct pending_writes *p_writes;
-  set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES);
+  set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES, protocol);
   void * prep_buf = (void *) p_writes->prep_fifo->prep_message;
   set_up_ldr_mrs(&prep_mr, prep_buf, &com_mr, (void *)com_fifo->commits, cb);
 
