@@ -19,9 +19,9 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 1
+#define FOLLOWERS_PER_MACHINE 10
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
-#define MACHINE_NUM 2
+#define MACHINE_NUM 3
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 
@@ -185,8 +185,8 @@
 	-----------------CONSISTENCY-------------------------
 --------------------------------------------------*/
 //----MULTICAST
-#define ENABLE_MULTICAST 1
-#define MULTICAST_TESTING_ 1
+#define ENABLE_MULTICAST 0
+#define MULTICAST_TESTING_ 0
 #define MULTICAST_TESTING (ENABLE_MULTICAST == 1 ? MULTICAST_TESTING_ : 0)
 #define SEND_MCAST_QP 0
 #define RECV_MCAST_QP 1
@@ -268,7 +268,7 @@
 
 
 // -------ACKS-------------
-#define USE_QUORUM 0
+#define USE_QUORUM 1
 #define QUORUM_NUM (CEILING(MACHINE_NUM, 2))
 #define LDR_QUORUM_OF_ACKS (USE_QUORUM == 1 ? (QUORUM_NUM - 1): FOLLOWER_MACHINE_NUM) //()
 
@@ -396,7 +396,7 @@
 // FLR - Receive
 #define FLR_RECV_PREP_Q_DEPTH 500 //
 #define FLR_RECV_COM_Q_DEPTH 500 //
-#define FLR_RECV_CR_Q_DEPTH 500 //()
+#define FLR_RECV_CR_Q_DEPTH 1 //()
 // FLR - Send
 #define FLR_SEND_ACK_Q_DEPTH 500 //
 #define FLR_SEND_W_Q_DEPTH 500 //

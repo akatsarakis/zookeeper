@@ -1057,8 +1057,8 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
   if (protocol == FOLLOWER) {
     *send_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
     *recv_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
-    (*recv_q_depths)[PREP_ACK_QP_ID] = FLR_RECV_PREP_Q_DEPTH;
-    (*recv_q_depths)[COMMIT_W_QP_ID] = FLR_RECV_COM_Q_DEPTH;
+    (*recv_q_depths)[PREP_ACK_QP_ID] = ENABLE_MULTICAST == 1? 1 : FLR_RECV_PREP_Q_DEPTH;
+    (*recv_q_depths)[COMMIT_W_QP_ID] = ENABLE_MULTICAST == 1? 1 : FLR_RECV_COM_Q_DEPTH;
     (*recv_q_depths)[FC_QP_ID] = FLR_RECV_CR_Q_DEPTH;
     (*send_q_depths)[PREP_ACK_QP_ID] = FLR_SEND_ACK_Q_DEPTH;
     (*send_q_depths)[COMMIT_W_QP_ID] = FLR_SEND_W_Q_DEPTH;
@@ -1150,18 +1150,21 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
       uint16_t index = (j * MESSAGES_IN_BCAST) + i;
       assert (index < MESSAGES_IN_BCAST_BATCH);
       if (ENABLE_MULTICAST == 1) {
-        prep_send_wr[index].wr.ud.ah = mcast->send_ah;
-        prep_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
-        prep_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
+        prep_send_wr[index].wr.ud.ah = mcast->send_ah[PREP_MCAST_QP];
+        prep_send_wr[index].wr.ud.remote_qpn = mcast->qpn[PREP_MCAST_QP];
+        prep_send_wr[index].wr.ud.remote_qkey = mcast->qkey[PREP_MCAST_QP];
+        com_send_wr[index].wr.ud.ah = mcast->send_ah[COM_MCAST_QP];
+        com_send_wr[index].wr.ud.remote_qpn = mcast->qpn[COM_MCAST_QP];
+        com_send_wr[index].wr.ud.remote_qkey = mcast->qkey[COM_MCAST_QP];
       }
       else {
         prep_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].ah;
         prep_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][PREP_ACK_QP_ID].qpn;
         prep_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
+        com_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].ah;
+        com_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].qpn;
+        com_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
       }
-      com_send_wr[index].wr.ud.ah = remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].ah;
-      com_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[rm_id][remote_thread][COMMIT_W_QP_ID].qpn;
-      com_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
       prep_send_wr[index].opcode = IBV_WR_SEND;
       prep_send_wr[index].num_sge = 1;
       prep_send_wr[index].sg_list = &prep_send_sgl[j];
@@ -1179,9 +1182,7 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
   // ACK Receives
   for (i = 0; i < LDR_MAX_RECV_ACK_WRS; i++) {
     ack_recv_sgl[i].length = LDR_ACK_RECV_SIZE;
-    if (ENABLE_MULTICAST == 1)
-      ack_recv_sgl[i].lkey = mcast->recv_mr->lkey;
-    else  ack_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+    ack_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
     ack_recv_wr[i].sg_list = &ack_recv_sgl[i];
     ack_recv_wr[i].num_sge = 1;
   }
@@ -1323,32 +1324,32 @@ void check_protocol(int protocol)
 
 // Initialize the mcast_essentials structure that is necessary
 void init_multicast(struct mcast_info **mcast_data, struct mcast_essentials **mcast,
-                    int local_client_id, struct hrd_ctrl_blk *cb, int protocol)
+                    int t_id, struct hrd_ctrl_blk *cb, int protocol)
 {
   check_protocol(protocol);
-
-  size_t dgram_buf_size = (size_t) (protocol == FOLLOWER ? FLR_BUF_SIZE : 0);
-  int recv_q_depth = protocol == FOLLOWER ? SC_CLIENT_RECV_BR_Q_DEPTH : LIN_CLIENT_RECV_BR_Q_DEPTH;
+  int *recv_q_depth = malloc(MCAST_QP_NUM * sizeof(int));
+  recv_q_depth[0] = protocol == FOLLOWER ? FLR_RECV_PREP_Q_DEPTH : 1;
+  recv_q_depth[1] = protocol == FOLLOWER ? FLR_RECV_COM_Q_DEPTH : 1;
   *mcast_data = malloc(sizeof(struct mcast_info));
-  (*mcast_data)->clt_id = local_client_id;
+  (*mcast_data)->t_id = t_id;
   setup_multicast(*mcast_data, recv_q_depth);
-   char char_buf[40];
-   inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, char_buf, 40);
-   printf("client: joined dgid: %s mlid 0x%x sl %d\n", char_buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
+//   char char_buf[40];
+//   inet_ntop(AF_INET6, (*mcast_data)->mcast_ud_param.ah_attr.grh.dgid.raw, char_buf, 40);
+//   printf("client: joined dgid: %s mlid 0x%x sl %d\n", char_buf,	(*mcast_data)->mcast_ud_param.ah_attr.dlid, (*mcast_data)->mcast_ud_param.ah_attr.sl);
   *mcast = malloc(sizeof(struct mcast_essentials));
-  (*mcast)->send_ah = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param.ah_attr));
-  (*mcast)->qpn  =  (*mcast_data)->mcast_ud_param.qp_num;
-  (*mcast)->qkey  =  (*mcast_data)->mcast_ud_param.qkey;
-  if (protocol == FOLLOWER) {
-    for (uint16_t i = 0; i < MCAST_QP_NUM; i++){
+
+  for (uint16_t i = 0; i < MCAST_QP_NUM; i++){
       (*mcast)->recv_cq[i] = (*mcast_data)->cm_qp[i].cq;
       (*mcast)->recv_qp[i] = (*mcast_data)->cm_qp[i].cma_id->qp;
+      (*mcast)->send_ah[i] = ibv_create_ah(cb->pd, &((*mcast_data)->mcast_ud_param[i].ah_attr));
+      (*mcast)->qpn[i]  =  (*mcast_data)->mcast_ud_param[i].qp_num;
+      (*mcast)->qkey[i]  =  (*mcast_data)->mcast_ud_param[i].qkey;
 
    }
   (*mcast)->recv_mr = ibv_reg_mr((*mcast_data)->cm_qp[0].pd, (void *)cb->dgram_buf,
                                  (size_t)FLR_BUF_SIZE, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ |
                                                        IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC);
-  }
+
 
   free(*mcast_data);
   if (protocol == FOLLOWER) assert((*mcast)->recv_mr != NULL);
@@ -1373,7 +1374,7 @@ int get_addr(char *dst, struct sockaddr *addr)
 //Handle the addresses
 void resolve_addresses(struct mcast_info *mcast_data)
 {
-    int ret, i, clt_id = mcast_data->clt_id;
+    int ret, i, t_id = mcast_data->t_id;
     char mcast_addr[40];
     // Source addresses (i.e. local IPs)
     mcast_data->src_addr = (struct sockaddr*)&mcast_data->src_in;
@@ -1386,23 +1387,23 @@ void resolve_addresses(struct mcast_info *mcast_data)
     // Destination addresses(i.e. multicast addresses)
     for (i = 0; i < MCAST_GROUPS_NUM; i ++) {
         mcast_data->dst_addr[i] = (struct sockaddr*)&mcast_data->dst_in[i];
-        int m_cast_group_id = clt_id * MACHINE_NUM + i;
+        int m_cast_group_id = t_id * MACHINE_NUM + i;
         sprintf(mcast_addr, "224.0.%d.%d", m_cast_group_id / 256, m_cast_group_id % 256);
-        printf("mcast addr %d: %s\n", i, mcast_addr);
+//        printf("mcast addr %d: %s\n", i, mcast_addr);
         ret = get_addr((char*) &mcast_addr, ((struct sockaddr *)&mcast_data->dst_in[i]));
         if (ret) printf("Client: failed to get dst address \n");
     }
 }
 
 // Set up the Send and Receive Qps for the multicast
-void set_up_qp(struct cm_qps* qps, int max_recv_q_depth)
+void set_up_qp(struct cm_qps* qps, int *max_recv_q_depth)
 {
     int ret, i, recv_q_depth;
     // qps[0].pd = ibv_alloc_pd(qps[0].cma_id->verbs); //new
     for (i = 0; i < MCAST_QP_NUM; i++) {
         qps[i].pd = ibv_alloc_pd(qps[i].cma_id->verbs);
         if (i > 0) qps[i].pd = qps[0].pd;
-        recv_q_depth = max_recv_q_depth;
+        recv_q_depth = max_recv_q_depth[i];
         qps[i].cq = ibv_create_cq(qps[i].cma_id->verbs, recv_q_depth, &qps[i], NULL, 0);
         struct ibv_qp_init_attr init_qp_attr;
         memset(&init_qp_attr, 0, sizeof init_qp_attr);
@@ -1421,20 +1422,20 @@ void set_up_qp(struct cm_qps* qps, int max_recv_q_depth)
 }
 
 // Initial function to call to setup multicast, this calls the rest of the relevant functions
-void setup_multicast(struct mcast_info *mcast_data, int recv_q_depth)
+void setup_multicast(struct mcast_info *mcast_data, int *recv_q_depth)
 {
-    int ret, i, clt_id = mcast_data->clt_id;
+    int ret, i, clt_id = mcast_data->t_id;
     static enum rdma_port_space port_space = RDMA_PS_UDP;
     // Create the channel
     mcast_data->channel = rdma_create_event_channel();
     if (!mcast_data->channel) {
-        printf("Client %d :failed to create event channel\n", mcast_data->clt_id);
+        printf("Client %d :failed to create event channel\n", mcast_data->t_id);
         exit(1);
     }
     // Set up the cma_ids
     for (i = 0; i < MCAST_QPS; i++ ) {
         ret = rdma_create_id(mcast_data->channel, &mcast_data->cm_qp[i].cma_id, &mcast_data->cm_qp[i], port_space);
-        if (ret) printf("Client %d :failed to create cma_id\n", mcast_data->clt_id);
+        if (ret) printf("Client %d :failed to create cma_id\n", mcast_data->t_id);
     }
     // deal with the addresses
     resolve_addresses(mcast_data);
@@ -1450,13 +1451,13 @@ void setup_multicast(struct mcast_info *mcast_data, int recv_q_depth)
         while (rdma_get_cm_event(mcast_data->channel, &event) == 0) {
             switch (event->event) {
                 case RDMA_CM_EVENT_ADDR_RESOLVED:
-                     printf("Client %d: RDMA ADDRESS RESOLVED address: %d \n", clt_id, i);
+//                     printf("Client %d: RDMA ADDRESS RESOLVED address: %d \n", t_id, i);
                     ret = rdma_join_multicast(mcast_data->cm_qp[qp_i].cma_id, mcast_data->dst_addr[i], mcast_data);
                     if (ret) printf("unable to join multicast \n");
                     break;
                 case RDMA_CM_EVENT_MULTICAST_JOIN:
-                    if (i == machine_id) mcast_data->mcast_ud_param = event->param.ud;
-                     printf("RDMA JOIN MUlTICAST EVENT %d \n", i);
+                    mcast_data->mcast_ud_param[i] = event->param.ud;
+//                     printf("RDMA JOIN MUlTICAST EVENT %d \n", i);
                     break;
                 case RDMA_CM_EVENT_MULTICAST_ERROR:
                 default:
@@ -1481,7 +1482,7 @@ void multicast_testing(struct mcast_essentials *mcast, int clt_gid, struct hrd_c
 {
 
     struct ibv_wc mcast_wc;
-    printf ("Client: Multicast Qkey %u and qpn %u \n", mcast->qkey, mcast->qpn);
+    printf ("Client: Multicast Qkey %u and qpn %u \n", mcast->qkey[COM_MCAST_QP], mcast->qpn[COM_MCAST_QP]);
 
 
     struct ibv_sge mcast_sg;
@@ -1502,23 +1503,23 @@ void multicast_testing(struct mcast_essentials *mcast, int clt_gid, struct hrd_c
     mcast_wr.imm_data   = (uint32) clt_gid + 120 + (machine_id * 10);
     mcast_wr.next       = NULL;
 
-    mcast_wr.wr.ud.ah          = mcast->send_ah;
-    mcast_wr.wr.ud.remote_qpn  = mcast->qpn;
-    mcast_wr.wr.ud.remote_qkey = mcast->qkey;
+    mcast_wr.wr.ud.ah          = mcast->send_ah[COM_MCAST_QP];
+    mcast_wr.wr.ud.remote_qpn  = mcast->qpn[COM_MCAST_QP];
+    mcast_wr.wr.ud.remote_qkey = mcast->qkey[COM_MCAST_QP];
 
-    if (ibv_post_send(cb->dgram_qp[0], &mcast_wr, &mcast_bad_wr)) {
+    if (ibv_post_send(cb->dgram_qp[COMMIT_W_QP_ID], &mcast_wr, &mcast_bad_wr)) {
         fprintf(stderr, "Error, ibv_post_send() failed\n");
         assert(false);
     }
 
     printf("THe mcast was sent, I am waiting for confirmation imm data %d\n", mcast_wr.imm_data);
-    hrd_poll_cq(cb->dgram_send_cq[0], 1, &mcast_wc);
+    hrd_poll_cq(cb->dgram_send_cq[COMMIT_W_QP_ID], 1, &mcast_wc);
     printf("The mcast was sent \n");
-    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[COM_MCAST_QP], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
-    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[COM_MCAST_QP], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
-    hrd_poll_cq(mcast->recv_cq[0], 1, &mcast_wc);
+    hrd_poll_cq(mcast->recv_cq[COM_MCAST_QP], 1, &mcast_wc);
     printf("Client %d imm data recved %d \n", clt_gid, mcast_wc.imm_data);
 
     exit(0);

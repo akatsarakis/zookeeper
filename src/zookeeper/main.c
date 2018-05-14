@@ -69,8 +69,9 @@ int main(int argc, char *argv[])
   cyan_printf("PREPARE CREDITS %d, FLR PREPARE BUF SLOTS %d, FLR PREPARE BUF SIZE %d\n",
               PREPARE_CREDITS, FLR_PREP_BUF_SLOTS, FLR_PREP_BUF_SIZE);
 
-  yellow_printf("Using Qourom %d , Quorum Machines %d \n", USE_QUORUM, LDR_QUORUM_OF_ACKS);
+  yellow_printf("Using Quorom %d , Quorum Machines %d \n", USE_QUORUM, LDR_QUORUM_OF_ACKS);
 
+  if (ENABLE_MULTICAST) assert(MCAST_QP_NUM == MCAST_GROUPS_NUM);
 	assert(LEADER_MACHINE < MACHINE_NUM);
 	assert(LEADER_PENDING_WRITES >= SESSIONS_PER_THREAD);
 	assert(sizeof(struct write_op) % 64 == 0);

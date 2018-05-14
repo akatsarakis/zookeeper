@@ -1534,7 +1534,7 @@ static inline void flr_check_debug_cntrs(uint32_t *credit_debug_cnt, uint32_t *w
 
     print_flr_stats(t_id);
     (*wait_for_preps_dbg_counter) = 0;
-    exit(0);
+//    exit(0);
   }
 }
 
@@ -2383,10 +2383,22 @@ static inline void wait_for_the_entire_prepare(volatile struct prep_message *pre
 {
   uint8_t coalesce_num = prep_mes->coalesce_num;
   uint32_t debug_cntr = 0;
+  while (prep_mes->coalesce_num == 0) {
+    if (ENABLE_ASSERTIONS) {
+      debug_cntr++;
+      if (debug_cntr == B_4_) {
+        red_printf("Flr %d stuck waiting for a prep coalesce num to not be zero, index %u, coalesce %u\n",
+                   t_id, index, prep_mes->coalesce_num);
+        print_flr_stats(t_id);
+        //exit(0);
+        debug_cntr = 0;
+      }
+    }
+  }
   while (prep_mes->prepare[prep_mes->coalesce_num - 1].opcode != CACHE_OP_PUT) {
     if (ENABLE_ASSERTIONS) {
       debug_cntr++;
-      if (debug_cntr > M_128) {
+      if (debug_cntr == B_4_) {
         red_printf("Flr %d stuck waiting for a prepare to come index %u prep id %u\n",
                    t_id, index, coalesce_num - 1);
         print_flr_stats(t_id);
@@ -2399,7 +2411,7 @@ static inline void wait_for_the_entire_prepare(volatile struct prep_message *pre
 
 
 // Poll for prepare messages
-static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps, uint32_t *pull_ptr,
+static inline void poll_for_prepares(volatile struct prep_message_ud_req *incoming_preps, uint32_t *pull_ptr,
 																		 struct pending_writes *p_writes, struct pending_acks *p_acks,
 																		 struct ibv_cq *prep_recv_cq, struct ibv_wc *prep_recv_wc,
 																		 struct recv_info *prep_recv_info, uint16_t t_id, uint8_t flr_id,
@@ -2411,12 +2423,11 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 //  if (t_id == 0) printf("index %u \n", index);
 	while(incoming_preps[index].prepare.opcode == CACHE_OP_PUT && p_writes->size < FLR_PENDING_WRITES) {
     // wait for the entire message
-    wait_for_the_entire_prepare((volatile struct prep_message *)&incoming_preps[index].prepare , t_id, index);
-    struct prep_message *prep_mes = &incoming_preps[index].prepare;
+    wait_for_the_entire_prepare(&incoming_preps[index].prepare, t_id, index);
+    struct prep_message *prep_mes = (struct prep_message *) &incoming_preps[index].prepare;
     uint8_t coalesce_num = prep_mes->coalesce_num;
 		struct prepare *prepare = prep_mes->prepare;
 		if (p_writes->size + coalesce_num > FLR_PENDING_WRITES) break;
-    // This is a trick to avoid the "volatile"
 		uint32_t incoming_l_id = *(uint32_t *)prep_mes->l_id;
 		uint64_t expected_l_id = p_writes->local_w_id + p_writes->size;
     if (DEBUG_PREPARES)
@@ -2480,6 +2491,7 @@ static inline void poll_for_prepares(struct prep_message_ud_req *incoming_preps,
 			p_acks->acks_to_send++;
 		}
 		incoming_preps[index].prepare.opcode = 0;
+    incoming_preps[index].prepare.coalesce_num = 0;
 		MOD_ADD(index, FLR_PREP_BUF_SLOTS);
 //    *pull_ptr = index;
 		polled_messages++;

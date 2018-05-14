@@ -49,4 +49,5 @@
 
 #define MILLION 1000000
 
+#define B_4_ 4294967295
 #define B_4 4294967296

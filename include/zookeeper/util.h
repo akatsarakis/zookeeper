@@ -72,7 +72,7 @@ struct cm_qps
 // This helps us set up the multicasts
 struct mcast_info
 {
-	int	clt_id;
+	int	t_id;
 	struct rdma_event_channel *channel;
 	struct sockaddr_storage dst_in[MCAST_GROUPS_NUM];
 	struct sockaddr *dst_addr[MCAST_GROUPS_NUM];
@@ -80,7 +80,7 @@ struct mcast_info
 	struct sockaddr *src_addr;
 	struct cm_qps cm_qp[MCAST_QPS];
 	//Send-only stuff
-	struct rdma_ud_param mcast_ud_param;
+	struct rdma_ud_param mcast_ud_param[MCAST_GROUPS_NUM];
 
 };
 
@@ -89,16 +89,16 @@ struct mcast_essentials {
 	struct ibv_cq *recv_cq[MCAST_QP_NUM];
 	struct ibv_qp *recv_qp[MCAST_QP_NUM];
 	struct ibv_mr *recv_mr;
-	struct ibv_ah *send_ah;
-	uint32_t qpn;
-	uint32_t qkey;
+	struct ibv_ah *send_ah[MCAST_QP_NUM];
+	uint32_t qpn[MCAST_QP_NUM];
+	uint32_t qkey[MCAST_QP_NUM];
 };
 
 int get_addr(char*, struct sockaddr*);
 int alloc_nodes(void);
-void setup_multicast(struct mcast_info*, int);
+void setup_multicast(struct mcast_info*, int*);
 void resolve_addresses(struct mcast_info*);
-void set_up_qp(struct cm_qps*, int);
+void set_up_qp(struct cm_qps*, int*);
 void multicast_testing(struct mcast_essentials*, int , struct hrd_ctrl_blk*);
 
 /* ---------------------------------------------------------------------------

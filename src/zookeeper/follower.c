@@ -11,11 +11,7 @@ void *follower(void *arg)
   uint16_t t_id = params.id;
   if (t_id == 0) yellow_printf("FOLLOWER-id %d \n", flr_id);
   uint16_t remote_ldr_thread = t_id;
-  if (ENABLE_MULTICAST == 1 && t_id == 0) {
-      red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
-      // TODO to fix it we must post receives seperately for acks and multicasts
-//      assert(false);
-  }
+
   int protocol = FOLLOWER;
 
 
@@ -31,7 +27,7 @@ void *follower(void *arg)
 
   uint32_t prep_push_ptr = 0, prep_pull_ptr = 0;
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
-  struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
+  volatile struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
   struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SIZE);
 
   /* ---------------------------------------------------------------------------
@@ -55,7 +51,7 @@ void *follower(void *arg)
   if (WRITE_RATIO > 0) {
     pre_post_recvs(&prep_push_ptr, prep_recv_qp, lkey, (void *) prep_buffer,
                    FLR_PREP_BUF_SLOTS, FLR_MAX_RECV_PREP_WRS, PREP_ACK_QP_ID, (uint32_t)FLR_PREP_RECV_SIZE);
-    pre_post_recvs(&com_push_ptr, prep_recv_qp, lkey, (void *) com_buffer,
+    pre_post_recvs(&com_push_ptr, com_recv_qp, lkey, (void *) com_buffer,
                    FLR_COM_BUF_SLOTS, FLR_MAX_RECV_COM_WRS, COMMIT_W_QP_ID, (uint32_t)FLR_COM_RECV_SIZE);
   }
   /* -----------------------------------------------------
@@ -130,10 +126,10 @@ void *follower(void *arg)
   struct recv_info *prep_recv_info, *com_recv_info;
   init_recv_info(&prep_recv_info, prep_push_ptr, FLR_PREP_BUF_SLOTS,
                  (uint32_t) FLR_PREP_RECV_SIZE, FLR_MAX_RECV_PREP_WRS, prep_recv_wr,
-                 cb->dgram_qp[PREP_ACK_QP_ID], prep_recv_sgl, (void*) prep_buffer);
+                 prep_recv_qp, prep_recv_sgl, (void*) prep_buffer);
   init_recv_info(&com_recv_info, com_push_ptr, FLR_COM_BUF_SLOTS,
                  (uint32_t) FLR_COM_RECV_SIZE, FLR_MAX_RECV_COM_WRS, com_recv_wr,
-                 cb->dgram_qp[COMMIT_W_QP_ID], com_recv_sgl, (void*) com_buffer);
+                 com_recv_qp, com_recv_sgl, (void*) com_buffer);
 
   struct pending_writes *p_writes;
   struct pending_acks *p_acks = (struct pending_acks *) malloc(sizeof(struct pending_acks));
@@ -176,7 +172,7 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
-    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, cb->dgram_recv_cq[PREP_ACK_QP_ID],
+    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, prep_recv_cq,
                       prep_recv_wc, prep_recv_info, t_id, flr_id, &wait_for_prepares_dbg_counter);
 
 
@@ -191,7 +187,7 @@ void *follower(void *arg)
     ------------------------------POLL FOR COMMITS---------------------------------
     ---------------------------------------------------------------------------*/
 
-    poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, cb->dgram_recv_cq[COMMIT_W_QP_ID],
+    poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, com_recv_cq,
                   com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx, t_id, flr_id, &wait_for_coms_dbg_counter);
 
     /* ---------------------------------------------------------------------------

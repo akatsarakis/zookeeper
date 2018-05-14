@@ -11,11 +11,9 @@ void *leader(void *arg)
   uint16_t follower_id = t_id;
   //uint64_t local_w_id = 1;
 
-	if (ENABLE_MULTICAST == 1 && t_id == 0) {
-		red_printf("MULTICAST IS NOT WORKING YET, PLEASE DISABLE IT\n");
-		// TODO to fix it we must post receives seperately for acks and multicasts
-//		assert(false);
-	}
+	if (ENABLE_MULTICAST == 1 && t_id == 0)
+		cyan_printf("MULTICAST IS ENABLED\n");
+
 	int protocol = LEADER;
 
 
