@@ -125,27 +125,6 @@ void set_up_queue_depths(int**, int**, int);
 void setup_connections_and_spawn_stats_thread(int, struct hrd_ctrl_blk *);
 void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
                 struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid);
-void set_up_ops(struct extended_cache_op**, struct extended_cache_op**,
-				struct extended_cache_op**, struct mica_resp**, struct mica_resp**,
-				struct mica_resp**, struct key_home**, struct key_home**, struct key_home**);
-void set_up_coh_ops(struct cache_op**, struct cache_op**, struct small_cache_op**,
-					struct small_cache_op**, struct mica_resp*, struct mica_resp*,
-					struct mica_op**, int);
-// Post receives for the coherence traffic in the init phase
-void post_coh_recvs(struct hrd_ctrl_blk*, int*, struct mcast_essentials*, int, void*);
-// Set up the memory registrations required in the client if there is no Inlining
-void set_up_mrs(struct ibv_mr**, struct ibv_mr**, struct extended_cache_op*, struct mica_op*,
-				struct hrd_ctrl_blk*);
-
-void set_up_credits(uint8_t[][MACHINE_NUM], struct ibv_send_wr*, struct ibv_sge*,
-					struct ibv_recv_wr*, struct ibv_sge*, struct hrd_ctrl_blk*, int);
-// Set up the remote Requests send and recv WRs
-void set_up_remote_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*,
-					   struct ibv_sge*, struct hrd_ctrl_blk* , int, struct ibv_mr*, int);
-// Set up all coherence send and recv WRs// Set up all coherence WRs
-void set_up_coh_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
-					struct ibv_send_wr*, struct ibv_sge*, struct mica_op*, uint16_t,
-					struct hrd_ctrl_blk*, struct ibv_mr*, struct mcast_essentials*, int);
 
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER--------------------------------------
@@ -162,8 +141,8 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int)
 
 // Set up all leader WRs
 void set_up_ldr_WRs(struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
-                    struct ibv_send_wr*, struct ibv_sge*,
-                    struct mica_op*, uint16_t, uint16_t, struct hrd_ctrl_blk*, struct ibv_mr*,
+                    struct ibv_send_wr*, struct ibv_sge*, struct ibv_recv_wr*, struct ibv_sge*,
+                    uint16_t, uint16_t, struct hrd_ctrl_blk*, struct ibv_mr*,
                     struct ibv_mr*, struct mcast_essentials*);
 // Set up all Follower WRs
 void set_up_follower_WRs(struct ibv_send_wr *ack_send_wr, struct ibv_sge *ack_send_sgl,
@@ -183,7 +162,7 @@ void pre_post_recvs(uint32_t*, struct ibv_qp *, uint32_t lkey, void*,
                     uint32_t, uint32_t, uint16_t, uint32_t);
 // set up some basic leader buffers
 void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
-                    struct mica_resp**, struct mica_op**, struct commit_fifo**);
+                    struct commit_fifo**, uint16_t);
 // Set up the memory registrations required in the leader if there is no Inlining
 void set_up_ldr_mrs(struct ibv_mr**, void*, struct ibv_mr**, void*,
                     struct hrd_ctrl_blk*);

@@ -81,16 +81,9 @@ void *follower(void *arg)
   struct ibv_wc credit_wc[FLR_MAX_CREDIT_RECV];
   struct ibv_recv_wr credit_recv_wr[FLR_MAX_CREDIT_RECV];
   uint16_t credits = W_CREDITS;
-  uint16_t wn = 0, rm_id = 0, wr_i = 0, br_i = 0, cb_i = 0, coh_message_count[VIRTUAL_CHANNELS][MACHINE_NUM],
-    credit_wr_i = 0, op_i = 0, upd_i = 0,	inv_ops_i = 0, update_ops_i = 0, ack_ops_i, coh_buf_i = 0,
-    upd_count, send_ack_count, stalled_ops_i, updates_sent, credit_recv_counter = 0, rem_req_i = 0, prev_rem_req_i,
-    ack_recv_counter = 0, next_op_i = 0, previous_wr_i, worker_id, remote_clt_id, min_batch_ability,
-    ack_push_ptr = 0, ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,// last_measured_op_i = 0,
-    ws[FOLLOWERS_PER_MACHINE] = {0},	/* Window slot to use for a  LOCAL worker */
-    acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
-  uint32_t cmd_count = 0, credit_debug_cnt = 0, outstanding_rem_reqs = 0;
-  long long trace_iter = 0, br_tx = 0, sent_ack_tx = 0;
-  long credit_tx = 0;
+
+  uint32_t credit_debug_cnt = 0, outstanding_writes = 0;
+  long trace_iter = 0, sent_ack_tx = 0, credit_tx = 0, w_tx = 0;
   //req_type measured_req_flag = NO_REQ;
   struct local_latency local_measure = {
     .measured_local_region = -1,
@@ -127,6 +120,11 @@ void *follower(void *arg)
   if (!FLR_W_ENABLE_INLINING)
     w_mr = register_buffer(cb->pd, p_writes->w_fifo->fifo, W_FIFO_SIZE * sizeof(struct w_message));
 
+  struct fifo *remote_w_buf;
+  init_fifo(&remote_w_buf, LEADER_W_BUF_SLOTS * sizeof(uint16_t), 1);
+  struct fifo *prep_buf_mirror;
+  init_fifo(&prep_buf_mirror, FLR_PREP_BUF_SLOTS * sizeof(uint16_t), 1);
+
   /* ---------------------------------------------------------------------------
   ------------------------------INITIALIZE STATIC STRUCTUREs--------------------
     ---------------------------------------------------------------------------*/
@@ -151,7 +149,7 @@ void *follower(void *arg)
   ------------------------------START LOOP--------------------------------
   ---------------------------------------------------------------------------*/
   while(1) {
-    if (t_stats[t_id].received_preps_mes_num > 0)
+    if (t_stats[t_id].received_preps_mes_num > 0 && FLR_CHECK_DBG_COUNTERS)
       flr_check_debug_cntrs(&credit_debug_cnt, &wait_for_coms_dbg_counter,
                             &wait_for_prepares_dbg_counter,
                             &wait_for_gid_dbg_counter, prep_buffer ,prep_pull_ptr, p_writes, t_id);
@@ -160,7 +158,7 @@ void *follower(void *arg)
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
     poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, prep_recv_cq,
-                      prep_recv_wc, prep_recv_info, t_id, flr_id, &wait_for_prepares_dbg_counter);
+                      prep_recv_wc, prep_recv_info, prep_buf_mirror, t_id, flr_id, &wait_for_prepares_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------
@@ -174,12 +172,13 @@ void *follower(void *arg)
     ---------------------------------------------------------------------------*/
 
     poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, com_recv_cq,
-                  com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx, t_id, flr_id, &wait_for_coms_dbg_counter);
+                  com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx,
+                  remote_w_buf, t_id, flr_id, &wait_for_coms_dbg_counter);
 
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------
     ---------------------------------------------------------------------------*/
-    flr_propagate_updates(p_writes, p_acks, resp, t_id, &wait_for_gid_dbg_counter);
+    flr_propagate_updates(p_writes, p_acks, resp, prep_buf_mirror, t_id, &wait_for_gid_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------
@@ -195,7 +194,8 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------SEND WRITES TO THE LEADER---------------------------
   ---------------------------------------------------------------------------*/
-
+    send_writes_to_the_ldr(p_writes, &credits, cb, w_send_sgl, w_send_wr, &w_tx, remote_w_buf,
+    t_id, &outstanding_writes);
 
 
 

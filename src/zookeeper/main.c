@@ -70,6 +70,8 @@ int main(int argc, char *argv[])
 
   green_printf("LEADER PREPARE INLINING %d, LEADER PENDING WRITES %d \n",
 							 LEADER_PREPARE_ENABLE_INLINING, LEADER_PENDING_WRITES);
+  green_printf("FOLLOWER WRITE INLINING %d, FOLLOWER WRITE FIFO SIZE %d \n",
+               FLR_W_ENABLE_INLINING, W_FIFO_SIZE);
   cyan_printf("PREPARE CREDITS %d, FLR PREPARE BUF SLOTS %d, FLR PREPARE BUF SIZE %d\n",
               PREPARE_CREDITS, FLR_PREP_BUF_SLOTS, FLR_PREP_BUF_SIZE);
 
@@ -89,6 +91,7 @@ int main(int argc, char *argv[])
   assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(SESSIONS_PER_THREAD < M_16);
   assert(FLR_MAX_RECV_COM_WRS >= FLR_CREDITS_IN_MESSAGE);
+  assert(CACHE_BATCH_SIZE > LEADER_PENDING_WRITES);
 
 
 //

@@ -78,13 +78,8 @@ void *leader(void *arg)
   struct ibv_recv_wr credit_recv_wr[LDR_MAX_CREDIT_RECV];
 
  	uint16_t credits[LDR_VC_NUM][FOLLOWER_MACHINE_NUM];
-	uint16_t com_bcast_num = 0,
-    coh_message_count[LDR_VC_NUM][MACHINE_NUM], coh_buf_i = 0,
-			ack_pop_ptr = 0, ack_size = 0, inv_push_ptr = 0, inv_size = 0,
-			acks_seen[MACHINE_NUM] = {0}, invs_seen[MACHINE_NUM] = {0}, upds_seen[MACHINE_NUM] = {0};
-	uint32_t cmd_count = 0;
 	uint32_t trace_iter = 0;
-  long long credit_tx = 0, prep_br_tx = 0, commit_br_tx = 0;
+  long prep_br_tx = 0, commit_br_tx = 0;
 
   struct recv_info *w_recv_info, *ack_recv_info;
   init_recv_info(&w_recv_info, w_buf_push_ptr, LEADER_W_BUF_SLOTS,
@@ -112,20 +107,14 @@ void *leader(void *arg)
 		latency_info.key_to_measure = malloc(sizeof(struct cache_key));
 
 
-	struct mica_op *coh_buf;
-	struct cache_op *ack_bcast_ops, *ops;
-  struct commit_fifo *com_fifo;
-//	struct small_cache_op *inv_ops, *inv_to_send_ops;
-//	struct key_home *key_homes, *next_key_homes, *third_key_homes;
-	//struct mica_resp *resp, *next_resp, *third_resp;
-//	struct mica_resp update_resp[BCAST_TO_CACHE_BATCH] = {0}, inv_resp[BCAST_TO_CACHE_BATCH];
-	struct ibv_mr *prep_mr, *com_mr;
-	//struct extended_cache_op *ops, *next_ops, *third_ops;
-  struct write_op *w_ops[LEADER_PENDING_WRITES];
-  struct mica_resp *resp, *commit_resp;
-	set_up_ldr_ops(&ops, &resp, &commit_resp, &coh_buf, &com_fifo);
 
-	uint16_t hottest_keys_pointers[HOTTEST_KEYS_TO_TRACK] = {0};
+	struct cache_op *ops;
+  struct commit_fifo *com_fifo;
+	struct ibv_mr *prep_mr, *com_mr;
+  struct mica_resp *resp;
+	set_up_ldr_ops(&ops, &resp, &com_fifo, t_id);
+
+
   struct pending_writes *p_writes;
   set_up_pending_writes(&p_writes, LEADER_PENDING_WRITES, protocol);
   void * prep_buf = (void *) p_writes->prep_fifo->prep_message;
@@ -134,8 +123,8 @@ void *leader(void *arg)
   // There are no explicit credits and therefore we need to represent the remote prepare buffer somehow,
   // such that we can interpret the incoming acks correctly
   struct fifo *remote_prep_buf;
-  init_fifo(&remote_prep_buf, FLR_PREP_BUF_SLOTS * sizeof(uint32_t), FOLLOWER_MACHINE_NUM);
-  uint32_t *fifo = (uint32_t *)remote_prep_buf[FOLLOWER_MACHINE_NUM -1].fifo;
+  init_fifo(&remote_prep_buf, FLR_PREP_BUF_SLOTS * sizeof(uint16_t), FOLLOWER_MACHINE_NUM);
+  uint16_t *fifo = (uint16_t *)remote_prep_buf[FOLLOWER_MACHINE_NUM -1].fifo;
   assert(fifo[FLR_PREP_BUF_SLOTS -1] == 0);
 
 	/* ---------------------------------------------------------------------------
@@ -146,8 +135,8 @@ void *leader(void *arg)
     set_up_credits_and_WRs(credits, credit_send_wr, &credit_sgl, credit_recv_wr,
 													 &credit_recv_sgl, cb, protocol, LDR_MAX_CREDIT_WRS, LDR_MAX_CREDIT_RECV);
 		set_up_ldr_WRs(prep_send_wr, prep_send_sgl, ack_recv_wr, ack_recv_sgl,
-                   com_send_wr, com_send_sgl,
-                   coh_buf, t_id, follower_id, cb, prep_mr, com_mr, mcast);
+                   com_send_wr, com_send_sgl, w_recv_wr, w_recv_sgl,
+                   t_id, follower_id, cb, prep_mr, com_mr, mcast);
 	}
 	// TRACE
 	struct trace_command *trace;
@@ -195,7 +184,7 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      propagate_updates(p_writes, com_fifo, commit_resp, t_id, &wait_for_gid_dbg_counter);
+      propagate_updates(p_writes, com_fifo, resp, t_id, &wait_for_gid_dbg_counter);
 
 
 
@@ -226,7 +215,8 @@ void *leader(void *arg)
 		------------------------------POLL FOR REMOTE WRITES--------------------------
 		---------------------------------------------------------------------------*/
     // get local and remote writes back to back to increase the write batch
-
+    poll_for_writes(w_buffer, &w_buf_pull_ptr, p_writes, cb->dgram_recv_cq[COMMIT_W_QP_ID],
+                    w_recv_wc, w_recv_info, t_id);
 
 
     /* ---------------------------------------------------------------------------
@@ -248,7 +238,7 @@ void *leader(void *arg)
                          remote_prep_buf, t_id,
                          &outstanding_prepares);
 
-    assert(p_writes->size <= SESSIONS_PER_THREAD);
+    assert(p_writes->size <= LEADER_PENDING_WRITES);
     for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
       uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
       assert (p_writes->w_state[ptr] == INVALID);

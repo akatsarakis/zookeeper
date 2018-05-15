@@ -1,11 +1,6 @@
-//#include <infiniband/verbs.h>
 #include "util.h"
 #include "city.h"
-//#ifndef _GNU_SOURCE
-//# define _GNU_SOURCE
-//#endif
 
-//#include <pthread.h>
 
 // Leader calls this function to connect with its followers
 void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb)
@@ -599,60 +594,6 @@ int pin_threads_avoiding_collisions(int c_id) {
 }
 
 
-/* ---------------------------------------------------------------------------
-------------------------------CLIENT INITIALIZATION --------------------------
----------------------------------------------------------------------------*/
-//// Post receives for the coherence traffic in the init phase
-//void post_coh_recvs(struct hrd_ctrl_blk *cb, int* push_ptr, struct mcast_essentials *mcast, int protocol, void* buf)
-//{
-//    check_protocol(protocol);
-//    int i, j;
-//    int credits = protocol == FOLLOWER ? SC_CREDITS : BROADCAST_CREDITS;
-//    int max_reqs = protocol == FOLLOWER ? SC_CLT_BUF_SLOTS : LIN_CLT_BUF_SLOTS;
-//    for(i = 0; i < MACHINE_NUM - 1; i++) {
-//        for(j = 0; j < credits; j++) {
-//            if (ENABLE_MULTICAST == 1) {
-//                hrd_post_dgram_recv(mcast->recv_qp,	(void *) (buf + *push_ptr * UD_REQ_SIZE),
-//                                    UD_REQ_SIZE, mcast->recv_mr->lkey);
-//            }
-//            else hrd_post_dgram_recv(cb->dgram_qp[BROADCAST_UD_QP_ID],
-//                                     (void *) (buf + *push_ptr * UD_REQ_SIZE), UD_REQ_SIZE, cb->dgram_buf_mr->lkey);
-//            MOD_ADD(*push_ptr, max_reqs);
-//            //if (*push_ptr == 0) *push_ptr = 1;
-//        }
-//    }
-//}
-
-
-
-// set the different queue depths for client's queue pairs
-void set_up_queue_depths(int** recv_q_depths, int** send_q_depths, int protocol)
-{
-    /* 1st Dgram for communication between Clients and servers
-      2nd Dgram for Broadcasting
-      3rd Dgram for Flow Control (Credit-based) */
-    if (protocol == FOLLOWER) {
-      *send_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
-      *recv_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
-      (*recv_q_depths)[REMOTE_UD_QP_ID] = CLIENT_RECV_REM_Q_DEPTH;
-      (*recv_q_depths)[BROADCAST_UD_QP_ID] = ENABLE_MULTICAST == 1 ? 1 : SC_CLIENT_RECV_BR_Q_DEPTH;
-      (*recv_q_depths)[FC_UD_QP_ID] = SC_CLIENT_RECV_CR_Q_DEPTH;
-      (*send_q_depths)[REMOTE_UD_QP_ID] = CLIENT_SEND_REM_Q_DEPTH;
-      (*send_q_depths)[BROADCAST_UD_QP_ID] = SC_CLIENT_SEND_BR_Q_DEPTH;
-      (*send_q_depths)[FC_UD_QP_ID] = SC_CLIENT_SEND_CR_Q_DEPTH;
-    }
-    else if (protocol == LEADER) {
-      *send_q_depths = malloc(LEADER_QP_NUM * sizeof(int));
-      *recv_q_depths = malloc(LEADER_QP_NUM * sizeof(int));
-      (*recv_q_depths)[REMOTE_UD_QP_ID] = CLIENT_RECV_REM_Q_DEPTH;
-      (*recv_q_depths)[BROADCAST_UD_QP_ID] = LIN_CLIENT_RECV_BR_Q_DEPTH;
-      (*recv_q_depths)[FC_UD_QP_ID] = LIN_CLIENT_RECV_CR_Q_DEPTH;
-      (*send_q_depths)[REMOTE_UD_QP_ID] = CLIENT_SEND_REM_Q_DEPTH;
-      (*send_q_depths)[BROADCAST_UD_QP_ID] = LIN_CLIENT_SEND_BR_Q_DEPTH;
-      (*send_q_depths)[FC_UD_QP_ID] = LIN_CLIENT_SEND_CR_Q_DEPTH;
-    }
-    else check_protocol(protocol);
-}
 
 // Used by all kinds of threads to publish their QPs
 void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb)
@@ -694,214 +635,6 @@ void setup_connections_and_spawn_stats_thread(int global_id, struct hrd_ctrl_blk
     }
     assert(qps_are_set_up == 1);
 //    printf("Thread %d has all the needed ahs\n", global_id );
-}
-
-// set up the OPS buffers
-void set_up_ops(struct extended_cache_op **ops, struct extended_cache_op **next_ops, struct extended_cache_op **third_ops,
-                struct mica_resp **resp, struct mica_resp **next_resp, struct mica_resp **third_resp,
-                struct key_home **key_homes, struct key_home **next_key_homes, struct key_home **third_key_homes)
-{
-    int i;
-    uint32_t extended_ops_size = (OPS_BUFS_NUM * CACHE_BATCH_SIZE * (sizeof(struct extended_cache_op)));
-    *ops = memalign(4096, extended_ops_size);
-    memset(*ops, 0, extended_ops_size);
-    *next_ops = &((*ops)[CACHE_BATCH_SIZE]);
-    *third_ops = &((*ops)[2 * CACHE_BATCH_SIZE]); //only used when no Inlining happens
-
-
-    *resp = memalign(4096, OPS_BUFS_NUM * CACHE_BATCH_SIZE * sizeof(struct mica_resp));
-    *next_resp = &((*resp)[CACHE_BATCH_SIZE]);
-    *third_resp = &((*resp)[2 * CACHE_BATCH_SIZE]);
-
-    *key_homes = memalign(4096, OPS_BUFS_NUM * CACHE_BATCH_SIZE * sizeof(struct key_home));
-    *next_key_homes = &((*key_homes)[CACHE_BATCH_SIZE]);
-    *third_key_homes = &((*key_homes)[2 * CACHE_BATCH_SIZE]);
-
-    assert(ops != NULL && next_ops != NULL && third_ops != NULL &&
-           resp != NULL && next_resp != NULL && third_resp != NULL &&
-           key_homes != NULL && next_key_homes != NULL && third_key_homes != NULL);
-
-    for(i = 0; i <  OPS_BUFS_NUM * CACHE_BATCH_SIZE; i++)
-        (*resp)[i].type = EMPTY;
-}
-
-// set up the coherence buffers
-void set_up_coh_ops(struct cache_op **update_ops, struct cache_op **ack_bcast_ops, struct small_cache_op **inv_ops,
-                    struct small_cache_op **inv_to_send_ops, struct mica_resp *update_resp, struct mica_resp *inv_resp,
-                    struct mica_op **coh_buf, int protocol)
-{
-    check_protocol(protocol);
-    int i;
-    *coh_buf = memalign(4096, COH_BUF_SIZE);
-    uint16_t cache_op_size = sizeof(struct cache_op);
-    uint16_t small_cache_op_size = sizeof(struct small_cache_op);
-    *update_ops = (struct cache_op *)malloc(BCAST_TO_CACHE_BATCH * cache_op_size); /* Batch of incoming broadcasts for the Cache*/
-    if (protocol != FOLLOWER) {
-        *ack_bcast_ops = (struct cache_op *)malloc(BCAST_TO_CACHE_BATCH * cache_op_size);
-        *inv_ops = (struct small_cache_op *)malloc(BCAST_TO_CACHE_BATCH * small_cache_op_size);
-        *inv_to_send_ops = (struct small_cache_op *)malloc(BCAST_TO_CACHE_BATCH * small_cache_op_size);
-    }
-    assert(*update_ops != NULL);
-    if (protocol != FOLLOWER)
-        assert(*ack_bcast_ops != NULL && *inv_ops != NULL && *inv_to_send_ops != NULL);
-    for(i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
-        update_resp[i].type = EMPTY;
-        if (protocol != FOLLOWER) {
-            inv_resp[i].type = EMPTY;
-            (*inv_to_send_ops)[i].opcode = EMPTY;
-        }
-    }
-
-}
-
-// Set up the memory registrations required in the client if there is no Inlining
-void set_up_mrs(struct ibv_mr **ops_mr, struct ibv_mr **coh_mr, struct extended_cache_op* ops,
-                struct mica_op *coh_buf, struct hrd_ctrl_blk *cb)
-{
-    if (LEADER_ENABLE_INLINING == 0) {
-        uint32_t extended_ops_size = (OPS_BUFS_NUM * CACHE_BATCH_SIZE * (sizeof(struct extended_cache_op)));
-        *ops_mr = register_buffer(cb->pd, (void*)ops, extended_ops_size);
-        if (WRITE_RATIO != 0) *coh_mr = register_buffer(cb->pd, (void*)coh_buf, COH_BUF_SIZE);
-    }
-}
-
-
-
-// Set up the remote Requests send and recv WRs
-void set_up_remote_WRs(struct ibv_send_wr* rem_send_wr, struct ibv_sge* rem_send_sgl,
-                       struct ibv_recv_wr* rem_recv_wr, struct ibv_sge* rem_recv_sgl,
-                       struct hrd_ctrl_blk *cb, int clt_gid, struct ibv_mr* ops_mr, int protocol)
-{
-    int i;
-    check_protocol(protocol);
-    uint16_t remote_buf_size = ENABLE_WORKER_COALESCING == 1 ?
-                               (GRH_SIZE + sizeof(struct wrkr_coalesce_mica_op)) : UD_REQ_SIZE ;
-    // This should be same for both protocols
-    for (i = 0; i < WINDOW_SIZE; i++) {
-        if (LEADER_ENABLE_INLINING == 0) rem_send_sgl[i].lkey = ops_mr->lkey;
-        else rem_send_wr[i].send_flags = IBV_SEND_INLINE;
-        rem_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-        rem_send_wr[i].imm_data = (uint32) clt_gid;
-        rem_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
-        rem_send_wr[i].num_sge = 1;
-        rem_send_wr[i].sg_list = &rem_send_sgl[i];
-        if (USE_ONLY_BIG_MESSAGES == 1)
-            rem_recv_sgl->length = HERD_PUT_REQ_SIZE + sizeof(struct ibv_grh);
-        else
-            rem_recv_sgl->length = remote_buf_size;
-        rem_recv_sgl->lkey = cb->dgram_buf_mr->lkey;
-        rem_recv_sgl->addr = (uintptr_t) &cb->dgram_buf[0];
-        rem_recv_wr[i].sg_list = rem_recv_sgl;
-        rem_recv_wr[i].num_sge = 1;
-    }
-}
-
-// Set up all coherence WRs
-void set_up_coh_WRs(struct ibv_send_wr *coh_send_wr, struct ibv_sge *coh_send_sgl,
-                    struct ibv_recv_wr *coh_recv_wr, struct ibv_sge *coh_recv_sgl,
-                    struct ibv_send_wr *ack_wr, struct ibv_sge *ack_sgl,
-                    struct mica_op *coh_buf, uint16_t local_client_id,
-                    struct hrd_ctrl_blk *cb, struct ibv_mr *coh_mr, struct mcast_essentials *mcast, int protocol)
-{
-//    int i, j;
-//    check_protocol(protocol);
-//    //BROADCAST WRs and credit Receives
-//    for (j = 0; j < MAX_BCAST_BATCH; j++) {
-//        //coh_send_sgl[j].addr = (uint64_t) (uintptr_t) (coh_buf + j);
-//        if (LEADER_ENABLE_INLINING == 0) coh_send_sgl[j].lkey = coh_mr->lkey;
-//        for (i = 0; i < MESSAGES_IN_BCAST; i++) {
-//            uint16_t rm_id;
-//            if (i < machine_id) rm_id = (uint16_t) i;
-//            else rm_id = (uint16_t) ((i + 1) % MACHINE_NUM);
-//            uint16_t clt_i = (uint16_t) (rm_id * LEADERS_PER_MACHINE + local_client_id);
-//            uint16_t index = (uint16_t) ((j * MESSAGES_IN_BCAST) + i);
-//            assert (index < MESSAGES_IN_BCAST_BATCH);
-//            if (ENABLE_MULTICAST == 1) {
-//                coh_send_wr[index].wr.ud.ah = mcast->send_ah;
-//                coh_send_wr[index].wr.ud.remote_qpn = mcast->qpn;
-//                coh_send_wr[index].wr.ud.remote_qkey = mcast->qkey;
-//            } else {
-//                if (protocol == FOLLOWER) {
-//                  coh_send_wr[index].wr.ud.ah = remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].ah;
-//                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_leader_qp[clt_i][BROADCAST_UD_QP_ID].qpn;
-//                }
-//                else {
-////                  coh_send_wr[index].wr.ud.ah = remote_follower_qp[i][][BROADCAST_UD_QP_ID].ah;
-////                  coh_send_wr[index].wr.ud.remote_qpn = (uint32) remote_follower_qp[clt_i][][BROADCAST_UD_QP_ID].qpn;
-//                }
-//              coh_send_wr[index].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-//            }
-//            if (protocol == FOLLOWER) coh_send_wr[index].opcode = IBV_WR_SEND_WITH_IMM; // TODO we should remove imms from here too
-//            else coh_send_wr[index].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
-//            coh_send_wr[index].num_sge = 1;
-//            coh_send_wr[index].sg_list = &coh_send_sgl[j];
-//            if (protocol == FOLLOWER) coh_send_wr[index].imm_data = (uint32) machine_id;
-//            if (LEADER_ENABLE_INLINING == 1) coh_send_wr[index].send_flags = IBV_SEND_INLINE;
-//            coh_send_wr[index].next = (i == MESSAGES_IN_BCAST - 1) ? NULL : &coh_send_wr[index + 1];
-//        }
-//    }
-//
-//    // Coherence Receives
-//    int max_coh_receives = protocol == FOLLOWER ? SC_MAX_COH_RECEIVES : MAX_COH_RECEIVES;
-//    for (i = 0; i < max_coh_receives; i++) {
-//        coh_recv_sgl[i].length = UD_REQ_SIZE;
-//        if (protocol == FOLLOWER && ENABLE_MULTICAST == 1)
-//            coh_recv_sgl[i].lkey = mcast->recv_mr->lkey;
-//        else  coh_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
-//        coh_recv_wr[i].sg_list = &coh_recv_sgl[i];
-//        coh_recv_wr[i].num_sge = 1;
-//    }
-//
-//    // Do acknowledgements
-//    if (protocol == LEADER) {
-//        // ACK WRs
-//        for (i = 0; i < BCAST_TO_CACHE_BATCH; i++) {
-//            ack_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-//            //ack_wr[i].imm_data = machine_id;
-//            ack_sgl[i].length = HERD_GET_REQ_SIZE;
-//            ack_wr[i].opcode = IBV_WR_SEND; // Attention!! there is no immediate here, cids do the job!
-//            ack_wr[i].num_sge = 1;
-//            ack_wr[i].sg_list = &ack_sgl[i];
-//        }
-//    }
-}
-
-void set_up_credits(uint8_t credits[][MACHINE_NUM], struct ibv_send_wr* credit_send_wr, struct ibv_sge* credit_send_sgl,
-                    struct ibv_recv_wr* credit_recv_wr, struct ibv_sge* credit_recv_sgl,
-                    struct hrd_ctrl_blk *cb, int protocol)
-{
-    check_protocol(protocol);
-    int i = 0;
-    int max_credt_wrs = protocol == FOLLOWER ?  SC_MAX_CREDIT_WRS : MAX_CREDIT_WRS;
-    int max_credit_recvs = protocol == FOLLOWER ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
-    // Credits
-    if (protocol == FOLLOWER)
-        for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = W_CREDITS;
-    else {
-        for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
-            credits[PREP_VC][i] = PREPARE_CREDITS;
-            credits[COMM_VC][i] = COMMIT_CREDITS;
-        }
-    }
-    // Credit WRs
-    for (i = 0; i < max_credt_wrs; i++) {
-        credit_send_sgl->length = 0;
-        credit_send_wr[i].opcode = IBV_WR_SEND_WITH_IMM;
-        credit_send_wr[i].num_sge = 0;
-        credit_send_wr[i].sg_list = credit_send_sgl;
-        if (protocol == FOLLOWER) credit_send_wr[i].imm_data = (uint32) machine_id;
-        credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-        credit_send_wr[i].next = NULL;
-        credit_send_wr[i].send_flags = IBV_SEND_INLINE;
-    }
-    //Credit Receives
-    credit_recv_sgl->length = 64;
-    credit_recv_sgl->lkey = cb->dgram_buf_mr->lkey;
-    credit_recv_sgl->addr = (uintptr_t) &cb->dgram_buf[0];
-    for (i = 0; i < max_credit_recvs; i++) {
-        credit_recv_wr[i].sg_list = credit_recv_sgl;
-        credit_recv_wr[i].num_sge = 1;
-    }
 }
 
 
@@ -990,14 +723,12 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int 
   (*p_writes)->w_state = (enum write_state *) malloc(size * sizeof(enum write_state));
   (*p_writes)->session_id = (uint32_t *) malloc(size * sizeof(uint32_t));
   (*p_writes)->acks_seen = (uint8_t *) malloc(size * sizeof(uint8_t));
-//  (*p_writes)->ack_bit_vectors = (uint8_t)malloc(size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
   (*p_writes)->flr_id = (uint8_t *) malloc(size * sizeof(uint8_t));
   (*p_writes)->is_local = (bool *) malloc(size * sizeof(bool));
   (*p_writes)->session_has_pending_write = (bool *) malloc(SESSIONS_PER_THREAD * sizeof(bool));
   (*p_writes)->ptrs_to_ops = (struct prepare **) malloc(size * sizeof(struct prepare *));
   if (protocol == FOLLOWER) init_fifo(&((*p_writes)->w_fifo), W_FIFO_SIZE * sizeof(struct w_message), 1);
   memset((*p_writes)->g_id, 0, size * sizeof(uint64_t));
-//  memset((*p_writes)->ack_bit_vectors, 0, size * FOLLOWER_MACHINE_NUM * sizeof(uint8_t));
   (*p_writes)->prep_fifo = (struct prep_fifo *) malloc(sizeof(struct prep_fifo));
   memset((*p_writes)->prep_fifo, 0, sizeof(struct prep_fifo));
   (*p_writes)->prep_fifo->prep_message =
@@ -1086,29 +817,24 @@ void pre_post_recvs(uint32_t* push_ptr, struct ibv_qp *recv_qp, uint32_t lkey, v
 
 // set up some basic leader buffers
 void set_up_ldr_ops(struct cache_op **ops, struct mica_resp **resp,
-                    struct mica_resp **commit_resp,
-                    struct mica_op **buf, struct commit_fifo **com_fifo)
+                    struct commit_fifo **com_fifo, uint16_t t_id)
 {
   int i;
-
   uint16_t cache_op_size = sizeof(struct cache_op);
   uint16_t mica_resp_size = sizeof(struct mica_resp);
-  *buf = memalign(4096, COH_BUF_SIZE);
-  *ops = memalign(4096, CACHE_BATCH_SIZE *  cache_op_size);
+
+  *ops = memalign(4096, (size_t)CACHE_BATCH_SIZE *  cache_op_size);
   *com_fifo =  malloc(sizeof(struct commit_fifo));
+  memset((*com_fifo), 0, sizeof(struct commit_fifo));
   (*com_fifo)->commits = (struct com_message *) malloc(COMMIT_FIFO_SIZE * sizeof(struct com_message));
-  *resp = memalign(4096, CACHE_BATCH_SIZE * mica_resp_size);
-  *commit_resp = memalign(4096, LEADER_PENDING_WRITES * mica_resp_size);
+  *resp = memalign(4096, (size_t)CACHE_BATCH_SIZE * mica_resp_size);
   memset((*com_fifo)->commits, 0, COMMIT_FIFO_SIZE * sizeof(struct com_message));
-  (*com_fifo)->push_ptr = 0;
-  (*com_fifo)->pull_ptr = 0; (*com_fifo)->size = 0;
+
   for(i = 0; i <  CACHE_BATCH_SIZE; i++) (*resp)[i].type = EMPTY;
-  for(i = 0; i <  LEADER_PENDING_WRITES; i++) (*commit_resp)[i].type = EMPTY;
-  for(i = 0; i <  COMMIT_CREDITS; i++) {
+  for(i = 0; i <  COMMIT_FIFO_SIZE; i++) {
       (*com_fifo)->commits[i].opcode = CACHE_OP_PUT;
   }
-  assert(*ops != NULL && *resp != NULL && *commit_resp != NULL && *buf != NULL);
-
+  assert(*ops != NULL && *resp != NULL);
 }
 
 // Set up the memory registrations required in the leader if there is no Inlining
@@ -1127,7 +853,8 @@ void set_up_ldr_mrs(struct ibv_mr **prep_mr, void *prep_buf,
 void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_sgl,
                     struct ibv_recv_wr *ack_recv_wr, struct ibv_sge *ack_recv_sgl,
                     struct ibv_send_wr *com_send_wr, struct ibv_sge *com_send_sgl,
-                    struct mica_op *buf, uint16_t t_id, uint16_t remote_thread,
+                    struct ibv_recv_wr *w_recv_wr, struct ibv_sge *w_recv_sgl,
+                    uint16_t t_id, uint16_t remote_thread,
                     struct hrd_ctrl_blk *cb, struct ibv_mr *prep_mr, struct ibv_mr *com_mr,
                     struct mcast_essentials *mcast)
 {
@@ -1178,6 +905,12 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
     ack_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
     ack_recv_wr[i].sg_list = &ack_recv_sgl[i];
     ack_recv_wr[i].num_sge = 1;
+  }
+  for (i = 0; i < LDR_MAX_RECV_W_WRS; i++) {
+    w_recv_sgl[i].length = (uint32_t)LDR_W_RECV_SIZE;
+    w_recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
+    w_recv_wr[i].sg_list = &w_recv_sgl[i];
+    w_recv_wr[i].num_sge = 1;
   }
 }
 
@@ -1459,11 +1192,11 @@ void setup_multicast(struct mcast_info *mcast_data, int *recv_q_depth)
             rdma_ack_cm_event(event);
             if (event->event == RDMA_CM_EVENT_MULTICAST_JOIN) break;
         }
-        if (i != RECV_MCAST_QP) {
+        //if (i != RECV_MCAST_QP) {
             // destroying the QPs works fine but hurts performance...
             //  rdma_destroy_qp(mcast_data->cm_qp[i].cma_id);
             //  rdma_destroy_id(mcast_data->cm_qp[i].cma_id);
-        }
+        //}
     }
     // rdma_destroy_event_channel(mcast_data->channel);
     // if (mcast_data->mcast_ud_param == NULL) mcast_data->mcast_ud_param = event->param.ud;

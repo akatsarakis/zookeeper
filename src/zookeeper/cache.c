@@ -447,7 +447,10 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct prepar
           resp[I].type = CACHE_PUT_SUCCESS;
         }
         else {
-          red_printf("wrong Opcode in cache: %d, req %d \n", op->opcode, I);
+          red_printf("wrong Opcode in cache: %d, req %d, flr_id %u, val_len %u, g_id %u , \n",
+                     op->opcode, I, preps[(pull_ptr + I) % max_op_size]->flr_id,
+                     preps[(pull_ptr + I) % max_op_size]->val_len,
+                     *(uint32_t *)preps[(pull_ptr + I) % max_op_size]->g_id);
           assert(0);
         }
       }
@@ -459,7 +462,7 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct prepar
     }
     if (zero_ops) {
 //      printf("Zero out %d at address %lu \n", op->opcode, &op->opcode);
-      op->opcode = 0;
+      op->opcode = 5;
     }
   }
 
