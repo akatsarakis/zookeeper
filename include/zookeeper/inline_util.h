@@ -116,6 +116,53 @@ static inline void post_recvs_with_recv_info(struct recv_info *recv, uint32_t re
   CPE(ret, "ibv_post_recv error", ret);
 }
 
+// Generic function to mirror buffer spaces--used when elements are added
+static inline void add_to_the_mirrored_buffer(struct fifo *mirror_buf, uint8_t coalesce_num, uint16_t number_of_fifos,
+                                              uint32_t max_size)
+{
+  for (uint16_t i = 0; i < number_of_fifos; i++) {
+    uint32_t push_ptr = mirror_buf[i].push_ptr;
+    uint16_t *fifo = (uint16_t *) mirror_buf[i].fifo;
+    fifo[push_ptr] = (uint16_t)coalesce_num;
+    MOD_ADD(mirror_buf[i].push_ptr, max_size);
+    mirror_buf[i].size++;
+    if (ENABLE_ASSERTIONS) assert(mirror_buf[i].size <= max_size);
+  }
+}
+
+// Generic function to mirror buffer spaces--used when elements are removed
+static inline uint16_t remove_from_the_mirrored_buffer(struct fifo *mirror_buf_, uint16_t remove_num,
+                                                       uint16_t t_id, uint8_t fifo_id, uint32_t max_size)
+{
+  struct fifo *mirror_buf = &mirror_buf_[fifo_id];
+  uint16_t *fifo = (uint16_t *)mirror_buf->fifo;
+  uint16_t new_credits = 0;
+  if (ENABLE_ASSERTIONS && mirror_buf->size == 0) {
+    red_printf("remove_num %u, ,mirror_buf->pull_ptr %u fifo_id %u  \n",
+               remove_num, mirror_buf->pull_ptr, fifo_id);
+    assert(false);
+  }
+  while (remove_num > 0) {
+    uint32_t pull_ptr = mirror_buf->pull_ptr;
+    if (fifo[pull_ptr] <= remove_num) {
+      remove_num -= fifo[pull_ptr];
+      MOD_ADD(mirror_buf->pull_ptr, max_size);
+      if (ENABLE_ASSERTIONS && mirror_buf->size == 0) {
+        red_printf("remove_num %u, ,mirror_buf->pull_ptr %u fifo_id %u  \n",
+                   remove_num, mirror_buf->pull_ptr, fifo_id);
+        assert(false);
+      }
+      mirror_buf->size--;
+      new_credits++;
+    }
+    else {
+      fifo[pull_ptr] -= remove_num;
+      remove_num = 0;
+    }
+  }
+  return new_credits;
+}
+
 /* ---------------------------------------------------------------------------
 //------------------------------ ZOOKEEPER DEBUGGING -----------------------------
 //---------------------------------------------------------------------------*/
@@ -460,100 +507,6 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 //------------------------------ MAIN LOOP -----------------------------
 //---------------------------------------------------------------------------*/
 
-// Generic function to mirror buffer spaces--used when elements are added
-static inline void add_to_the_mirrored_buffer(struct fifo *mirror_buf, uint8_t coalesce_num, uint16_t number_of_fifos,
-                                              uint32_t max_size)
-{
-  for (uint16_t i = 0; i < number_of_fifos; i++) {
-    uint32_t push_ptr = mirror_buf[i].push_ptr;
-    uint16_t *fifo = (uint16_t *) mirror_buf[i].fifo;
-    fifo[push_ptr] = (uint16_t)coalesce_num;
-    MOD_ADD(mirror_buf[i].push_ptr, max_size);
-    mirror_buf[i].size++;
-    if (ENABLE_ASSERTIONS) assert(mirror_buf[i].size <= max_size);
-  }
-}
-
-// Generic function to mirror buffer spaces--used when elements are removed
-static inline uint16_t remove_from_the_mirrored_buffer(struct fifo *mirror_buf, uint16_t remove_num,
-                                                    uint16_t t_id, uint8_t fifo_id, uint32_t max_size)
-{
-  uint16_t *fifo = (uint16_t *)mirror_buf->fifo;
-  uint16_t new_credits = 0;
-  if (ENABLE_ASSERTIONS && mirror_buf->size == 0) {
-    red_printf("remove_num %u, ,mirror_buf->pull_ptr %u fifo_id %u  \n",
-               remove_num, mirror_buf->pull_ptr, fifo_id);
-    assert(false);
-  }
-  while (remove_num > 0) {
-    uint32_t pull_ptr = mirror_buf->pull_ptr;
-    if (fifo[pull_ptr] <= remove_num) {
-      remove_num -= fifo[pull_ptr];
-      MOD_ADD(mirror_buf->pull_ptr, max_size);
-      if (ENABLE_ASSERTIONS && mirror_buf->size == 0) {
-        red_printf("remove_num %u, ,mirror_buf->pull_ptr %u fifo_id %u  \n",
-                   remove_num, mirror_buf->pull_ptr, fifo_id);
-        assert(false);
-      }
-      mirror_buf->size--;
-      new_credits++;
-    }
-    else {
-      fifo[pull_ptr] -= remove_num;
-      remove_num = 0;
-    }
-  }
-  return new_credits;
-}
-
-
-// Mirror the follower's buffer space, used when broadcasting prepares
-static inline void mirror_remote_buffer(struct fifo *remote_prep_buf, uint16_t credits[][FOLLOWER_MACHINE_NUM],
-                                        uint8_t coalesce_num)
-{
-  for (uint16_t i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
-    credits[PREP_VC][i]--;
-    uint32_t push_ptr = remote_prep_buf[i].push_ptr;
-    uint16_t *fifo = (uint16_t *) remote_prep_buf[i].fifo;
-    fifo[push_ptr] = (uint16_t)coalesce_num;
-    MOD_ADD(remote_prep_buf[i].push_ptr, FLR_PREP_BUF_SLOTS);
-    remote_prep_buf[i].size++;
-    if (ENABLE_ASSERTIONS) assert(remote_prep_buf[i].size <= FLR_PREP_BUF_SLOTS);
-  }
-}
-
-// Find out how much the prep credits should be increased
-static inline void increase_prep_credits(struct fifo *remote_prep_buf, uint16_t ack_num,
-                                         uint16_t *credits, uint16_t t_id, uint8_t ack_follower_id)
-{
-  uint16_t *fifo = (uint16_t *)remote_prep_buf->fifo;
-  if (ENABLE_ASSERTIONS && remote_prep_buf->size == 0) {
-    red_printf("ack_num %u, credits %d,remote_prep_buf->pull_ptr %u flr id %u  \n",
-               ack_num, *credits, remote_prep_buf->pull_ptr, ack_follower_id);
-    print_ldr_stats(t_id);
-    assert(false);
-  }
-  while (ack_num > 0) {
-    uint16_t pull_ptr = remote_prep_buf->pull_ptr;
-    if (fifo[pull_ptr] <= ack_num) {
-      ack_num -= fifo[pull_ptr];
-      MOD_ADD(remote_prep_buf->pull_ptr, FLR_PREP_BUF_SLOTS);
-      if (ENABLE_ASSERTIONS && remote_prep_buf->size == 0) {
-        red_printf("ack_num %u, credits %d,remote_prep_buf->pull_ptr %u, flr id %u  \n",
-        ack_num, *credits, remote_prep_buf->pull_ptr, ack_follower_id);
-        print_ldr_stats(t_id);
-        assert(false);
-      }
-      remote_prep_buf->size--;
-      (*credits)++;
-      if (ENABLE_ASSERTIONS) assert((*credits) <= PREPARE_CREDITS);
-    }
-    else {
-      fifo[pull_ptr] -= ack_num;
-      ack_num = 0;
-    }
-  }
-}
 
 // Spin until you know the entire message is there
 static inline void wait_for_the_entire_ack(volatile struct ack_message *ack,
@@ -606,11 +559,8 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
       t_stats[t_id].received_acks += ack_num;
       t_stats[t_id].received_acks_mes_num++;
     }
-
-    increase_prep_credits(&remote_prep_buf[ack->follower_id], ack->ack_num,
-                          &credits[PREP_VC][ack->follower_id], t_id, ack->follower_id);
-//    credits[COMM_VC][ack->follower_id] ++;
-//    if (credits[COMM_VC][ack->follower_id] > COMMIT_CREDITS) credits[COMM_VC][ack->follower_id] = COMMIT_CREDITS;
+    credits[PREP_VC][ack->follower_id] +=
+      remove_from_the_mirrored_buffer(remote_prep_buf, ack->ack_num, t_id, ack->follower_id, FLR_PREP_BUF_SLOTS);
     // if the pending write FIFO is empty it means the acks are for committed messages.
     if (p_writes->size == 0 ) {
       if (!USE_QUORUM) assert(false);
@@ -1065,7 +1015,9 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 		forge_prep_wr(bcast_pull_ptr, p_writes, cb,  prep_send_sgl, prep_send_wr, prep_br_tx, br_i, credits, vc, t_id);
 		br_i++;
     uint8_t coalesce_num = p_writes->prep_fifo->prep_message[bcast_pull_ptr].coalesce_num;
-    mirror_remote_buffer(remote_prep_buf, credits, coalesce_num);
+//    mirror_remote_buffer(remote_prep_buf, credits, coalesce_num);
+    add_to_the_mirrored_buffer(remote_prep_buf, coalesce_num, FOLLOWER_MACHINE_NUM, FLR_PREP_BUF_SLOTS);
+    for (uint16_t i = 0; i < FOLLOWER_MACHINE_NUM; i++) credits[PREP_VC][i]--;
     if (ENABLE_ASSERTIONS) {
       assert( p_writes->prep_fifo->bcast_size >= coalesce_num);
       (*outstanding_prepares) += coalesce_num;
@@ -1188,7 +1140,7 @@ static inline void poll_for_prepares(volatile struct prep_message_ud_req *incomi
 		uint32_t incoming_l_id = *(uint32_t *)prep_mes->l_id;
 		uint64_t expected_l_id = p_writes->local_w_id + p_writes->size;
     if (DEBUG_PREPARES)
-      printf("Flr %d sees a write message with %d prepares at index %u l_id %u, expected lid %lu \n",
+      printf("Flr %d sees a prep message with %d prepares at index %u l_id %u, expected lid %lu \n",
              t_id, coalesce_num, index, incoming_l_id, expected_l_id);
 		if (FLR_DISALLOW_OUT_OF_ORDER_PREPARES) {
       if (expected_l_id != (uint64_t) incoming_l_id) {
@@ -1231,7 +1183,7 @@ static inline void poll_for_prepares(volatile struct prep_message_ud_req *incomi
 			if (prepare[prep_i].flr_id == flr_id)  {
 				p_writes->is_local[push_ptr] = true;
 				memcpy(&p_writes->session_id[push_ptr], prepare[prep_i].session_id, 3 * sizeof(uint8_t));
-        // printf("A prepare polled for local session %u \n", p_writes->session_id[push_ptr]);
+//        printf("A prepare polled for local session %u/%u, push_ptr %u\n", p_writes->session_id[push_ptr], sess, push_ptr);
 			}
 			else p_writes->is_local[push_ptr] = false;
 			p_writes->w_state[push_ptr] = VALID;
@@ -1360,13 +1312,13 @@ static inline void send_credits_for_commits(struct recv_info *com_recv_info, str
      credit_wr->send_flags |= IBV_SEND_SIGNALED;
     } else credit_wr->send_flags = IBV_SEND_INLINE;
     if (((*credit_tx) % COM_CREDIT_SS_BATCH) == COM_CREDIT_SS_BATCH - 1) {
-     hrd_poll_cq(cb->dgram_send_cq[FC_UD_QP_ID], 1, &signal_send_wc);
+     hrd_poll_cq(cb->dgram_send_cq[FC_QP_ID], 1, &signal_send_wc);
     }
   }
   (*credit_tx)++;
   credit_wr[credit_num - 1].next = NULL;
 //   yellow_printf("I am sending %d credit message(s)\n", credit_num);
-  int ret = ibv_post_send(cb->dgram_qp[FC_UD_QP_ID], &credit_wr[0], &bad_send_wr);
+  int ret = ibv_post_send(cb->dgram_qp[FC_QP_ID], &credit_wr[0], &bad_send_wr);
   CPE(ret, "ibv_post_send error in credits", ret);
 }
 
@@ -1566,7 +1518,8 @@ static inline void flr_propagate_updates(struct pending_writes *p_writes, struct
 //    printf("Follower found updates to propagate\n");
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
 		if (p_writes->is_local[p_writes->pull_ptr]) {
-      if (DEBUG_WRITES) cyan_printf("Found a local req from session %d \n", p_writes->session_id[p_writes->pull_ptr]);
+      if (DEBUG_WRITES)
+        cyan_printf("Found a local req from session %d \n", p_writes->session_id[p_writes->pull_ptr]);
 			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;

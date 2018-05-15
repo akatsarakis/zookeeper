@@ -15,7 +15,6 @@ set(SOURCE_FILES
         src/zookeeper/main.c
         src/zookeeper/follower.c
         src/zookeeper/leader.c
-        src/zookeeper/worker.c
         src/zookeeper/stats.c
         #libhrd
         src/libhrd/hrd_util.c

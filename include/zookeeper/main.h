@@ -19,93 +19,25 @@
 #define MAX_SERVER_PORTS 1 // better not change that
 
 
-#define FOLLOWERS_PER_MACHINE 5
+#define FOLLOWERS_PER_MACHINE 19
 #define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
 #define MACHINE_NUM 3
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
+#define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
 
 #define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 30 ? 0 : 1 )// socket where the cache is bind
 
-#define CLIENT_NUM (LEADERS_PER_MACHINE * MACHINE_NUM)
-#define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
-
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
-#define REMOTE_UD_QP_ID 0 /* The id of the UD QP the clients use for remote reqs */
-#define BROADCAST_UD_QP_ID 1 /* The id of the UD QP the clients use for braodcasting */
-#define FC_UD_QP_ID 2 /* The id of the UD QP the clients use for flow control */
-
 
 
 
 
 #define ENABLE_WORKERS_CRCW 1
-#define ENABLE_STATIC_LOCAL_ALLOCATION 1 // in crcw statically allocate clients to workers for the local requests
-#define DISABLE_LOCALS 1
-#define ENABLE_LOCAL_WORKERS_ 0 // this seems to help
-#define ENABLE_LOCAL_WORKERS ((ENABLE_WORKERS_CRCW == 1 && DISABLE_LOCALS == 0) ? ENABLE_LOCAL_WORKERS_ : 0)
-#define LOCAL_WORKERS 1 // number of workers that are only spawned for local requests
-#define ACTIVE_WORKERS_PER_MACHINE ((ENABLE_LOCAL_WORKERS == 1) && (DISABLE_LOCALS == 0) ? (FOLLOWERS_PER_MACHINE - LOCAL_WORKERS) : FOLLOWERS_PER_MACHINE)
-#define ENABLE_HUGE_PAGES_FOR_WORKER_REQUEST_REGION 0 // it appears enabling this brings some inconsistencies in performance
-
 #define ENABLE_CACHE_STATS 0
 #define EXIT_ON_PRINT 0
 #define PRINT_NUM 4
 #define DUMP_STATS_2_FILE 0
-
-
-
-
-
-
-/*-------------------------------------------------
-	-----------------PROTOCOLS-----------------
---------------------------------------------------*/
-#define FOLLOWER 1
-#define LEADER 2
-#define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 30
-
-
-
-
-
-/*-------------------------------------------------
-	-----------------BATCHING ABILITIES-----------------
---------------------------------------------------*/
-//-----CLIENT-------
-
-#define ENABLE_THREAD_PARTITIONING_C_TO_W_ 1
-#define ENABLE_THREAD_PARTITIONING_C_TO_W (ENABLE_WORKERS_CRCW == 1 ? ENABLE_THREAD_PARTITIONING_C_TO_W_ : 0)
-#define BALANCE_REQS_ 0 //
-
-#define WINDOW_SIZE 256 /* Maximum remote batch*/
-#define LOCAL_WINDOW  66 //12 // 21 for 200
-#define LOCAL_REGIONS 3 // number of local regions per client
-#define WS_PER_WORKER (ENABLE_THREAD_PARTITIONING_C_TO_W == 1 ? 22 : 20) //22 /* Number of outstanding requests kept by each client of any given worker*/
-#define MAX_OUTSTANDING_REQS (WS_PER_WORKER * (FOLLOWER_NUM - FOLLOWERS_PER_MACHINE))
-#define ENABLE_MULTI_BATCHES 0 // allow multiple batches
-
-
-//----- WORKER BUFFER
-#define WORKER_REQ_SIZE (ENABLE_COALESCING == 1 ? (UD_REQ_SIZE + EXTRA_WORKER_REQ_BYTES) : UD_REQ_SIZE)
-#define WORKER_NET_REQ_SIZE (WORKER_REQ_SIZE - GRH_SIZE)
-#define MULTIGET_AVAILABLE_SIZE WORKER_NET_REQ_SIZE
-#define MAX_COALESCE_PER_MACH ((MULTIGET_AVAILABLE_SIZE - 1) / HERD_GET_REQ_SIZE) // -1 because we overload val_len with the number of gets
-#define MAXIMUM_INLINE_SIZE 188
-
-//-----WORKER-------
-#define WORKER_MAX_BATCH 127
-
-
-
-// INLINING
-#define WORKER_RESPONSE_MAX_SIZE (ENABLE_WORKER_COALESCING == 1 ? (MAX_COALESCE_PER_MACH * HERD_VALUE_SIZE) : HERD_VALUE_SIZE)
-#define WORKER_ENABLE_INLINING (((USE_BIG_OBJECTS == 1) || (WORKER_RESPONSE_MAX_SIZE > MAXIMUM_INLINE_SIZE)) ?  0 : 1)
-
-// CACHE
-#define HOTTEST_KEYS_TO_TRACK 20
-
 
 
 /*-------------------------------------------------
@@ -114,44 +46,32 @@
 
 #define MEASURE_LATENCY 0
 #define REMOTE_LATENCY_MARK 100 // mark a remote request for measurement by attaching this to the imm_data of the wr
-
-#define DO_ONLY_LOCALS 0
 #define USE_A_SINGLE_KEY 0
 #define DISABLE_HYPERTHREADING 0 // do not shcedule two threads on the same core
-#define ENABLE_WAKE_UP 0
-#define ONLY_CACHE_HITS 0
 #define DEFAULT_SL 0 //default service level
-#define DEBUG_WORKER_RECVS 0
+
 
 
 /*-------------------------------------------------
 	-----------------TRACE-----------------
 --------------------------------------------------*/
-#define SEND_ONLY_TO_ONE_MACHINE 0 // Dynamically alters trace to send all the requests to one machinr
-#define SEND_ONLY_TO_NEXT_MACHINE 0 // Dynamically alters trace so each machine sends its requests to the next one
-#define BALANCE_REQS_IN_CHUNKS 0
-#define CHUNK_NUM 0
-#define BALANCE_HOT_REQS 0 // Use a uniform access pattern among hot requests
+
 #define BALANCE_HOT_WRITES 0// Use a uniform access pattern among hot writes
-#define ENABLE_HOT_REQ_GROUPING 0 // Group the hot keys, such that the accesses pof key correspond to a group
-#define NUM_OF_KEYS_TO_GROUP 10
-#define GROUP_SIZE 50
 #define SKEW_EXPONENT_A 99 // representation divided by 100 (i.e. 99 means a = 0.99)
 #define EMULATING_CREW 1 // emulate crew, to facilitate running the CREW baseline
-#define RANDOM_MACHINE 0 // pick a rnadom machine
 #define DISABLE_CACHE 0 // Run Baseline
 #define LOAD_BALANCE 1 // Use a uniform access pattern
 #define FOLLOWER_DOES_ONLY_READS 0
 
 /*-------------------------------------------------
-	-----------------CONSISTENCY-------------------------
+	-----------------MULTICAST-------------------------
 --------------------------------------------------*/
-//----MULTICAST
+
 #define ENABLE_MULTICAST 1
 #define MULTICAST_TESTING_ 0
 #define MULTICAST_TESTING (ENABLE_MULTICAST == 1 ? MULTICAST_TESTING_ : 0)
 #define MCAST_QPS MACHINE_NUM
-//#define MCAST_GROUPS_NUM MACHINE_NUM
+
 
 #define MCAST_QP_NUM 2
 #define PREP_MCAST_QP 0
@@ -162,28 +82,20 @@
 #define MAX_BCAST_BATCH (ENABLE_MULTICAST == 1 ? 4 : 4) //8 //(128 / (MACHINE_NUM - 1)) // how many broadcasts can fit in a batch
 #define MESSAGES_IN_BCAST (ENABLE_MULTICAST == 1 ? 1 : (FOLLOWER_MACHINE_NUM))
 #define MESSAGES_IN_BCAST_BATCH MAX_BCAST_BATCH * MESSAGES_IN_BCAST //must be smaller than the q_depth
-#define BCAST_TO_CACHE_BATCH 90 //100 // helps to keep small //47 for SC
-
-//----------SC flow control-----------------
-
-
-
-
-
-
-//----------LIN flow control-----------------
-
-
-#define VIRTUAL_CHANNELS 3 // upds acks and invs
 
 
 /* --------------------------------------------------------------------------------
  * -----------------------------ZOOKEEPER---------------------------------------
  * --------------------------------------------------------------------------------
  * --------------------------------------------------------------------------------*/
+#define FOLLOWER 1
+#define LEADER 2
+#define ENABLE_MULTIPLE_SESSIONS 1
+#define SESSIONS_PER_THREAD 100
 #define MIN_SS_BATCH 127// The minimum SS batch
 #define ENABLE_ASSERTIONS 1
 #define ENABLE_STAT_COUNTING 1
+#define MAXIMUM_INLINE_SIZE 188
 
 //--------FOLOWER Flow Control
 #define W_CREDITS 15
@@ -191,18 +103,11 @@
 //--------LEADER Flow Control
 #define PREPARE_CREDITS 15
 #define COMMIT_CREDITS 30
-#define BCAST_CREDITS (PREPARE_CREDITS + COMMIT_CREDITS)
-#define LDR_PREPOST_RECEIVES_NUM (W_CREDITS * FOLLOWER_MACHINE_NUM)
-#define MAX_OF_CREDITS MAX(W_CREDITS, PREPARE_CREDITS)
-#define LDR_MAX_RECEIVE_WRS (FOLLOWER_MACHINE_NUM * MAX_OF_CREDITS)
-#define LDR_MAX_RECEIVES (FOLLOWER_MACHINE_NUM * (W_CREDITS + PREPARE_CREDITS))
-#define LDR_VIRTUAL_CHANNELS 2 // upds acks and invs
+
 #define LDR_VC_NUM 2
 #define PREP_VC 0
 #define COMM_VC 1
-#define FLR_VC_NUM 2
-#define ACK_VC 0
-#define W_VC 1
+
 #define LDR_CREDIT_DIVIDER (1)
 #define LDR_CREDITS_IN_MESSAGE (W_CREDITS / LDR_CREDIT_DIVIDER)
 #define FLR_CREDIT_DIVIDER (2)
@@ -221,7 +126,6 @@
 
 #define MAX_LIDS_IN_AN_ACK K_64_
 #define ACK_SIZE 12
-//#define MAX_ACK_COALESCE 5
 #define COM_ACK_HEADER_SIZE 4 // follower id, opcode, coalesce_num
 #define FLR_ACK_SEND_SIZE (12) // a local global id and its metadata
 #define LDR_ACK_RECV_SIZE (GRH_SIZE + (FLR_ACK_SEND_SIZE))
@@ -238,7 +142,7 @@
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
 
 //---WRITES---
-#define MAX_W_COALESCE 12
+#define MAX_W_COALESCE 6
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
 #define W_SIZE (VALUE_SIZE + WRITE_HEADER)
 #define FLR_W_SEND_SIZE (MAX_W_COALESCE * W_SIZE)
@@ -358,39 +262,9 @@
 
 
 
-
-
 /* ----------------
  * -------------OLD STUFF
  * ---------------------------*/
-
-
-
-
-
-
-//---------Buffer Space-------------
-
-
-
-/*-------------------------------------------------
------------------SELECTIVE SIGNALING-------------------------
---------------------------------------------------*/
-
-
-#define WORKER_SS_BATCH MAX(MIN_SS_BATCH, (WORKER_MAX_BATCH + 1))
-
-
-
-
-
-
-//RECV
-#define WORKER_RECV_Q_DEPTH  (((MACHINE_NUM - 1) * CEILING(LEADERS_PER_MACHINE, FOLLOWER_QP_NUM) * WS_PER_WORKER) + 3) // + 3 for good measre
-
-
-// SEND
-#define WORKER_SEND_Q_DEPTH  WORKER_MAX_BATCH + 3 // + 3 for good measure
 
 
 // WORKERS synchronization options
@@ -438,12 +312,7 @@ struct trace_command {
 	uint128 key_hash;
 };
 
-struct coalesce_inf {
-	uint16_t wr_i;
-	uint16_t slots;
-	uint16_t op_i;
-	uint16_t wrkr;
-};
+
 /* ah pointer and qpn are accessed together in the critical path
    so we are putting them in the same cache line */
 struct remote_qp {
@@ -459,17 +328,6 @@ struct remote_qp {
  *  cache and commits should be sent out
  * */
 enum write_state {INVALID, VALID, SENT, READY, SEND_COMMITTS};
-
-
-
-struct completed_writes {
-  struct write_op **w_ops; // FIFO QUEUE that points to the next write to commit
-  enum write_state *w_state;
-  uint32_t *p_writes_ptr;
-  uint16_t pull_ptr;
-  uint16_t push_ptr;
-
-};
 
 
 // The format of an ack message

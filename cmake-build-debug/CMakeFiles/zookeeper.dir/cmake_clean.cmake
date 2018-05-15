@@ -4,7 +4,6 @@ file(REMOVE_RECURSE
   "CMakeFiles/zookeeper.dir/src/zookeeper/main.c.o"
   "CMakeFiles/zookeeper.dir/src/zookeeper/follower.c.o"
   "CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o"
-  "CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o"
   "CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o"
   "CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o"
   "CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o"

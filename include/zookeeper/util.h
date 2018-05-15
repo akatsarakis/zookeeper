@@ -95,7 +95,6 @@ struct mcast_essentials {
 };
 
 int get_addr(char*, struct sockaddr*);
-int alloc_nodes(void);
 void setup_multicast(struct mcast_info*, int*);
 void resolve_addresses(struct mcast_info*);
 void set_up_qp(struct cm_qps*, int*);
@@ -105,16 +104,15 @@ void multicast_testing(struct mcast_essentials*, int , struct hrd_ctrl_blk*);
 ------------------------------INITIALIZATION --------------------------------------
 ---------------------------------------------------------------------------*/
 
-void createAHs(uint16_t clt_gid, struct hrd_ctrl_blk *cb);
-void createAHs_for_worker(uint16_t, struct hrd_ctrl_blk*);
+
 // Follower calls this function to conenct with the leader
 void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb);
 // Leader calls this function to connect with its followers
 void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb);
 // Used by all kinds of threads to publish their QPs
 void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb);
-int* get_random_permutation(int n, int clt_gid, uint64_t *seed);
-int parse_trace(char* path, struct trace_command **cmds, int clt_gid);
+
+int parse_trace(char* path, struct trace_command **cmds, int gid);
 
 
 void set_up_the_buffer_space(uint16_t[], uint32_t[], uint32_t[]);
@@ -123,8 +121,7 @@ void init_multicast(struct mcast_info**, struct mcast_essentials**, int, struct 
 void set_up_queue_depths(int**, int**, int);
 // Connect with Workers and Clients
 void setup_connections_and_spawn_stats_thread(int, struct hrd_ctrl_blk *);
-void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr, struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
-                struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid);
+
 
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER--------------------------------------

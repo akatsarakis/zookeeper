@@ -393,33 +393,6 @@ src/zookeeper/util.c.s:
 	$(MAKE) -f CMakeFiles/zookeeper.dir/build.make CMakeFiles/zookeeper.dir/src/zookeeper/util.c.s
 .PHONY : src/zookeeper/util.c.s
 
-src/zookeeper/worker.o: src/zookeeper/worker.c.o
-
-.PHONY : src/zookeeper/worker.o
-
-# target to build an object file
-src/zookeeper/worker.c.o:
-	$(MAKE) -f CMakeFiles/zookeeper.dir/build.make CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o
-.PHONY : src/zookeeper/worker.c.o
-
-src/zookeeper/worker.i: src/zookeeper/worker.c.i
-
-.PHONY : src/zookeeper/worker.i
-
-# target to preprocess a source file
-src/zookeeper/worker.c.i:
-	$(MAKE) -f CMakeFiles/zookeeper.dir/build.make CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.i
-.PHONY : src/zookeeper/worker.c.i
-
-src/zookeeper/worker.s: src/zookeeper/worker.c.s
-
-.PHONY : src/zookeeper/worker.s
-
-# target to generate assembly for a file
-src/zookeeper/worker.c.s:
-	$(MAKE) -f CMakeFiles/zookeeper.dir/build.make CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.s
-.PHONY : src/zookeeper/worker.c.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -459,9 +432,6 @@ help:
 	@echo "... src/zookeeper/util.o"
 	@echo "... src/zookeeper/util.i"
 	@echo "... src/zookeeper/util.s"
-	@echo "... src/zookeeper/worker.o"
-	@echo "... src/zookeeper/worker.i"
-	@echo "... src/zookeeper/worker.s"
 .PHONY : help
 
 

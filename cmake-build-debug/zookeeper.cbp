@@ -152,9 +152,6 @@
 		<Unit filename="/home/vasilis/Documents/houston/zookeeper/src/zookeeper/util.c">
 			<Option target="zookeeper"/>
 		</Unit>
-		<Unit filename="/home/vasilis/Documents/houston/zookeeper/src/zookeeper/worker.c">
-			<Option target="zookeeper"/>
-		</Unit>
 		<Unit filename="/usr/include/infiniband/verbs.h">
 			<Option target="zookeeper"/>
 		</Unit>

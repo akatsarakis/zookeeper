@@ -15,7 +15,7 @@
 #define CACHE_NUM_BKTS (128 * 1024) //64K buckets seems to be enough to store most of 250K keys
 #define CACHE_NUM_KEYS (25 * 1000)
 
-#define WRITE_RATIO 1000  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define WRITE_RATIO 1  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
 #define CACHE_BATCH_SIZE 600
 
 //Cache States
@@ -269,9 +269,6 @@ void cache_add_2_total_ops_issued(long long ops_issued);
 void mica_insert_one_crcw(struct mica_kv *kv, struct mica_op *op, struct mica_resp *resp);
 void mica_batch_op_crcw(struct mica_kv* kv, int n, struct mica_op **op, struct mica_resp *resp);
 
-int batch_from_trace_to_cache(int trace_iter, int thread_id, struct trace_command *trace, struct extended_cache_op *ops,
-							  struct mica_resp *resp, struct key_home* kh, int isSC, uint16_t next_op_i ,
-							  struct latency_flags*, struct timespec*, uint16_t*);
 
 void cache_init(int cache_id, int num_threads);
 void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len);
@@ -284,13 +281,5 @@ void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op, struc
 /* The leader sends the writes to be committed with this function*/
 void cache_batch_op_updates(uint32_t , int , struct prepare**, struct mica_resp *,uint32_t,  uint32_t, bool);
 
-// ** OLD STUFF **
-
-void cache_batch_op_sc(int op_num, int thread_id, struct extended_cache_op **ops, struct mica_resp *resp);
-void cache_batch_op_sc_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
-
-void cache_batch_op_lin_non_stalling_sessions(int op_num, int thread_id, struct extended_cache_op **op, struct mica_resp *resp);
-void cache_batch_op_lin_non_stalling_sessions_with_cache_op(int op_num, int thread_id, struct cache_op **op, struct mica_resp *resp);
-void cache_batch_op_lin_non_stalling_sessions_with_small_cache_op(int op_num, int thread_id, struct small_cache_op **op, struct mica_resp *resp);
 
 #endif

@@ -1,5 +1,5 @@
 #include "util.h"
-#include "city.h"
+
 
 
 // Leader calls this function to connect with its followers
@@ -113,114 +113,8 @@ void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb) {
     }
 }
 
-// Worker creates Ahs for the Client Qps that are used for Remote requests
-void createAHs_for_worker(uint16_t wrkr_lid, struct hrd_ctrl_blk *cb) {
-    int i, qp_i;
-    struct ibv_ah *clt_ah[CLIENT_NUM][LEADER_QP_NUM];
-    struct hrd_qp_attr *clt_qp[CLIENT_NUM][LEADER_QP_NUM];
 
-    for(i = 0; i < CLIENT_NUM; i++) {
-        if (i / LEADERS_PER_MACHINE == machine_id) continue; // skip the local clients
-        /* Compute the control block and physical port index for client @i */
-        int local_port_i = 0;
-
-        char clt_name[QP_NAME_SIZE];
-        sprintf(clt_name, "client-dgram-%d-%d", i, REMOTE_UD_QP_ID);
-        /* Get the UD queue pair for the ith client */
-        clt_qp[i][REMOTE_UD_QP_ID] = NULL;
-
-        while(clt_qp[i][REMOTE_UD_QP_ID] == NULL) {
-            clt_qp[i][REMOTE_UD_QP_ID] = hrd_get_published_qp(clt_name);
-            //printf("Worker %d is expecting client %s\n" , wrkr_lid, clt_name);
-            if(clt_qp[i][REMOTE_UD_QP_ID] == NULL) {
-                usleep(200000);
-            }
-        }
-        //  printf("main: Worker %d found client %d. Client LID: %d\n",
-        //  	wrkr_lid, i, clt_qp[i][REMOTE_UD_QP_ID]->lid);
-
-        struct ibv_ah_attr ah_attr = {
-                //-----INFINIBAND----------
-                .is_global = 0,
-                .dlid = (uint16_t) clt_qp[i][REMOTE_UD_QP_ID]->lid,
-                .sl = clt_qp[i][REMOTE_UD_QP_ID]->sl,
-                .src_path_bits = 0,
-                /* port_num (> 1): device-local port for responses to this client */
-                .port_num = (uint8) (local_port_i + 1),
-        };
-
-        //  ---ROCE----------
-        if (is_roce == 1) {
-            ah_attr.is_global = 1;
-            ah_attr.dlid = 0;
-            ah_attr.grh.dgid.global.interface_id =  clt_qp[i][REMOTE_UD_QP_ID]->gid_global_interface_id;
-            ah_attr.grh.dgid.global.subnet_prefix = clt_qp[i][REMOTE_UD_QP_ID]->gid_global_subnet_prefix;
-            ah_attr.grh.sgid_index = 0;
-            ah_attr.grh.hop_limit = 1;
-        }
-        clt_ah[i][REMOTE_UD_QP_ID] = ibv_create_ah(cb->pd, &ah_attr);
-        assert(clt_ah[i][REMOTE_UD_QP_ID] != NULL);
-        remote_leader_qp[i][REMOTE_UD_QP_ID].ah = clt_ah[i][REMOTE_UD_QP_ID];
-        remote_leader_qp[i][REMOTE_UD_QP_ID].qpn = clt_qp[i][REMOTE_UD_QP_ID]->qpn;
-    }
-}
-
-/* Generate a random permutation of [0, n - 1] for client @l_id */
-int* get_random_permutation(int n, int clt_gid, uint64_t *seed) {
-    int i, j, temp;
-    assert(n > 0);
-
-    /* Each client uses a different range in the cycle space of fastrand */
-    for(i = 0; i < clt_gid * CACHE_NUM_KEYS; i++) {
-        hrd_fastrand(seed);
-    }
-
-    printf("client %d: creating a permutation of 0--%d. This takes time..\n",
-           clt_gid, n - 1);
-
-    int *log = (int *) malloc(n * sizeof(int));
-    assert(log != NULL);
-    for(i = 0; i < n; i++) {
-        log[i] = i;
-    }
-
-    printf("\tclient %d: shuffling..\n", clt_gid);
-    for(i = n - 1; i >= 1; i--) {
-        j = hrd_fastrand(seed) % (i + 1);
-        temp = log[i];
-        log[i] = log[j];
-        log[j] = temp;
-    }
-    printf("\tclient %d: done creating random permutation\n", clt_gid);
-
-    return log;
-}
-
-// Set up the buffer space of the worker for multiple qps: With M QPs per worker, Client X sends its reqs to QP: X mod M
-void set_up_the_buffer_space(uint16_t clts_per_qp[], uint32_t per_qp_buf_slots[], uint32_t qp_buf_base[]) {
-    int i, clt_i,qp = 0;
-    // decide how many clients go to each QP
-//    for (i = 0; i < LEADERS_PER_MACHINE; i++) {
-//        assert(qp < FOLLOWER_QP_NUM);
-//        clts_per_qp[qp]++;
-//        MOD_ADD(qp, FOLLOWER_QP_NUM);
-//    }
-    for (i = 0; i < MACHINE_NUM; i++) {
-        if (i == machine_id) continue;
-        for (clt_i = 0; clt_i < LEADERS_PER_MACHINE; clt_i++) {
-            clts_per_qp[(clt_i + i)% FOLLOWER_QP_NUM]++;
-        }
-    }
-    qp_buf_base[0] = 0;
-    for (i = 0; i < FOLLOWER_QP_NUM; i++) {
-        per_qp_buf_slots[i] = clts_per_qp[i]  * WS_PER_WORKER;
-//        cyan_printf("per_qp_buf_slots for qp %d : %d\n", i, per_qp_buf_slots[i]);
-        if (i < FOLLOWER_QP_NUM - 1)
-            qp_buf_base[i + 1] =  qp_buf_base[i] + per_qp_buf_slots[i];
-    }
-}
-
-int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
+int parse_trace(char* path, struct trace_command **cmds, int gid){
     FILE * fp;
     ssize_t read;
     size_t len = 0;
@@ -281,56 +175,12 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
                 word[strlen(word) - 1] = 0;
 
             if(word_count == 1) {
-                (*cmds)[i].home_machine_id = (uint8_t) (strtoul(word, &ptr, 10) % MACHINE_NUM);
-                if (RANDOM_MACHINE == 1) (*cmds)[i].home_machine_id = (uint8_t) (rand() % MACHINE_NUM);
-                assert((*cmds)[i].home_machine_id < MACHINE_NUM);
-                if (LOAD_BALANCE == 1){
-                    (*cmds)[i].home_machine_id = (uint8_t) (rand() % MACHINE_NUM);
-//                    printf("random %d \n", (*cmds)[i].home_machine_id);
-                    while (DISABLE_LOCALS == 1 && (*cmds)[i].home_machine_id == machine_id)
-                        (*cmds)[i].home_machine_id = (uint8_t) (rand() % MACHINE_NUM);
-                }else if(DISABLE_LOCALS == 1 && (*cmds)[i].home_machine_id == (uint8_t) machine_id)
-                    (*cmds)[i].home_machine_id = (uint8_t) (((*cmds)[i].home_machine_id + 1) % MACHINE_NUM);
-                if (SEND_ONLY_TO_ONE_MACHINE == 1)
-                    if(DISABLE_LOCALS == 1 && machine_id == 0)
-                        (*cmds)[i].home_machine_id = (uint8_t) 1;
-                    else
-                        (*cmds)[i].home_machine_id = (uint8_t) 0;
-                else if(SEND_ONLY_TO_NEXT_MACHINE == 1)
-                    (*cmds)[i].home_machine_id = (uint8_t) ((machine_id + 1) % MACHINE_NUM);
-                else if(BALANCE_REQS_IN_CHUNKS == 1)
-                    (*cmds)[i].home_machine_id = (uint8_t) (CHUNK_NUM == 0? 0 : (i / CHUNK_NUM) % MACHINE_NUM);
-                else if (DO_ONLY_LOCALS == 1) (*cmds)[i].home_machine_id = (uint8) machine_id;
-                assert(DISABLE_LOCALS == 0 || machine_id != (*cmds)[i].home_machine_id);
-            } else if(word_count == 2){
-                (*cmds)[i].home_worker_id = (uint8_t) (strtoul(word, &ptr, 10) % FOLLOWERS_PER_MACHINE);
-                if(LOAD_BALANCE == 1 || EMULATING_CREW == 1){
-                    (*cmds)[i].home_worker_id = (uint8_t) (rand() % ACTIVE_WORKERS_PER_MACHINE );
-                }
-                assert((*cmds)[i].home_worker_id < FOLLOWERS_PER_MACHINE);
+                // DO NOTHING;
+
+            } else if(word_count == 2) {
+              // DO NOTHING;
             } else if(word_count == 3){
                 (*cmds)[i].key_id = (uint32_t) strtoul(word, &ptr, 10);
-                if (ONLY_CACHE_HITS == 1)
-                    (*cmds)[i].key_id = (uint32) rand() % CACHE_NUM_KEYS;
-                // HOT KEYS
-                if ((*cmds)[i].key_id < CACHE_NUM_KEYS) {
-                    if ((BALANCE_HOT_WRITES == 1 && is_update) || BALANCE_HOT_REQS == 1) {
-                        (*cmds)[i].key_id = (uint32_t) rand() % CACHE_NUM_KEYS;
-                        range_assert((*cmds)[i].key_id, 0, CACHE_NUM_KEYS);
-                    }
-                    else if (ENABLE_HOT_REQ_GROUPING == 1) {
-                        if ((*cmds)[i].key_id < NUM_OF_KEYS_TO_GROUP) {
-                            (*cmds)[i].key_id = ((*cmds)[i].key_id * GROUP_SIZE) + (rand() % GROUP_SIZE);
-                        }
-                        else if ((*cmds)[i].key_id < NUM_OF_KEYS_TO_GROUP * GROUP_SIZE)
-                            (*cmds)[i].key_id += GROUP_SIZE;
-                    }
-                    if ((*cmds)[i].key_id < HOTTEST_KEYS_TO_TRACK) hottest_key_counter++;
-                }
-                else { // COLD KEYS
-                    (*cmds)[i].key_id %= HERD_NUM_KEYS;
-                    if ((*cmds)[i].key_id < CACHE_NUM_KEYS) (*cmds)[i].key_id+= CACHE_NUM_KEYS;
-                }
                 if(USE_A_SINGLE_KEY == 1)
                     (*cmds)[i].key_id =  0;
                 if ((*cmds)[i].key_id < CACHE_NUM_KEYS) { // hot
@@ -351,44 +201,21 @@ int parse_trace(char* path, struct trace_command **cmds, int clt_gid){
                     }
                 }
                 (*cmds)[i].key_hash = CityHash128((char *) &((*cmds)[i].key_id), 4);
-
-
                 debug_cnt++;
             }else if(word_count == 0) {
-                while (word[letter_count] != '\0'){
-                    switch(word[letter_count]) {
-                        // case 'H' :
-                        //     (*cmds)[i].opcode = (uint8_t) ((*cmds)[i].opcode | HOT_KEY);
-                        //     break;
-                        // case 'N' :
-                        //     (*cmds)[i].opcode = (uint8_t) ((*cmds)[i].opcode | NORMAL_KEY);
-                        //     break;
-                        //     case 'R' :
-                        //         (*cmds)[i].opcode = (uint8_t) ((*cmds)[i].opcode | READ_OP);
-                        //         break;
-                        //     case 'W' :
-                        //         (*cmds)[i].opcode = (uint8_t) ((*cmds)[i].opcode | WRITE_OP);
-                        //         break;
-                        default :
-                            break;
-                            assert(0);
-                    }
-                    letter_count++;
-                }
+              // DO NOTHING;
             }
 
             word_count++;
             word = strtok_r(NULL, " ", &saveptr);
             if (word == NULL && word_count < 4) {
-                printf("Client %d Error: Reached word %d in line %d : %s \n",clt_gid, word_count, i, line);
+                printf("Client %d Error: Reached word %d in line %d : %s \n",gid, word_count, i, line);
                 assert(false);
             }
         }
 
     }
-    if (clt_gid  == 0) printf("Write Ratio: %.2f%% \n", (double) (writes * 100) / cmd_count);
-    if (clt_gid  == 0) printf("Hottest keys percentage of the trace: %.2f%% for %d keys \n",
-                              (double) (hottest_key_counter * 100) / cmd_count, HOTTEST_KEYS_TO_TRACK);
+    if (gid  == 0) printf("Write Ratio: %.2f%% \n", (double) (writes * 100) / cmd_count);
     (*cmds)[cmd_count].opcode = NOP;
     // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
     //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
@@ -527,14 +354,6 @@ void dump_stats_2_file(struct stats* st){
     fclose(fp);
 }
 
-void append_throughput(double throughput)
-{
-    FILE *throughput_fd;
-    throughput_fd = fopen("../../results/throughput.txt", "a");
-    fprintf(throughput_fd, "%2.f \n", throughput);
-    fclose(throughput_fd);
-}
-
 int spawn_stats_thread() {
     pthread_t *thread_arr = malloc(sizeof(pthread_t));
     pthread_attr_t attr;
@@ -638,46 +457,6 @@ void setup_connections_and_spawn_stats_thread(int global_id, struct hrd_ctrl_blk
 }
 
 
-/* ---------------------------------------------------------------------------
-------------------------------WORKER INITIALIZATION --------------------------
----------------------------------------------------------------------------*/
-
-void set_up_wrs(struct wrkr_coalesce_mica_op** response_buffer, struct ibv_mr* resp_mr,
-                struct hrd_ctrl_blk *cb, struct ibv_sge* recv_sgl,
-                struct ibv_recv_wr* recv_wr, struct ibv_send_wr* wr, struct ibv_sge* sgl, uint16_t wrkr_lid)
-{
-    uint16_t i;
-    if ((WORKER_ENABLE_INLINING == 0) || (ENABLE_WORKER_COALESCING == 1)) {
-        uint32_t resp_buf_size = ENABLE_WORKER_COALESCING == 1 ? sizeof(struct wrkr_coalesce_mica_op)* WORKER_SS_BATCH :
-                                 sizeof(struct mica_op)* WORKER_SS_BATCH; //the buffer needs to be large enough to deal with NIC asynchronous reads
-        *response_buffer = malloc(resp_buf_size);
-        resp_mr = register_buffer(cb->pd, (void*)(*response_buffer), resp_buf_size);
-    }
-
-    // Initialize the Work requests and the Receive requests
-    for (i = 0; i < WORKER_MAX_BATCH; i++) {
-        if (!ENABLE_COALESCING)
-            recv_sgl[i].length = HERD_PUT_REQ_SIZE + sizeof(struct ibv_grh);//req_size;
-        else recv_sgl[i].length = sizeof(struct wrkr_ud_req);
-        recv_sgl[i].lkey = cb->dgram_buf_mr->lkey;
-        recv_wr[i].sg_list = &recv_sgl[i];
-        recv_wr[i].num_sge = 1;
-
-
-        wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-        wr[i].opcode = IBV_WR_SEND; // Immediate is not used here
-        if (WORKER_ENABLE_INLINING == 0) {
-            sgl[i].lkey = resp_mr->lkey;
-            // sgl[i].addr = (uintptr_t)(*response_buffer)[i].value;
-        }
-        if(ENABLE_MULTI_BATCHES) //) || MEASURE_LATENCY)
-            wr[i].opcode = IBV_WR_SEND_WITH_IMM; // Immediate is not used here
-        wr[i].num_sge = 1;
-        wr[i].sg_list = &sgl[i];
-        if(ENABLE_MULTI_BATCHES || MEASURE_LATENCY)
-            wr[i].imm_data = (uint32) (machine_id * FOLLOWERS_PER_MACHINE) + wrkr_lid;
-    }
-}
 
 /* ---------------------------------------------------------------------------
 ------------------------------LEADER --------------------------------------
@@ -722,6 +501,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int 
   (*p_writes)->g_id = (uint64_t *) malloc(size * sizeof(uint64_t));
   (*p_writes)->w_state = (enum write_state *) malloc(size * sizeof(enum write_state));
   (*p_writes)->session_id = (uint32_t *) malloc(size * sizeof(uint32_t));
+  memset((*p_writes)->session_id, 0, size * sizeof(uint32_t));
   (*p_writes)->acks_seen = (uint8_t *) malloc(size * sizeof(uint8_t));
   (*p_writes)->flr_id = (uint8_t *) malloc(size * sizeof(uint8_t));
   (*p_writes)->is_local = (bool *) malloc(size * sizeof(bool));

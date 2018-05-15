@@ -14,7 +14,6 @@ set(CMAKE_DEPENDS_CHECK_C
   "/home/vasilis/Documents/houston/zookeeper/src/zookeeper/main.c" "/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/zookeeper.dir/src/zookeeper/main.c.o"
   "/home/vasilis/Documents/houston/zookeeper/src/zookeeper/stats.c" "/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o"
   "/home/vasilis/Documents/houston/zookeeper/src/zookeeper/util.c" "/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/zookeeper.dir/src/zookeeper/util.c.o"
-  "/home/vasilis/Documents/houston/zookeeper/src/zookeeper/worker.c" "/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o"
   )
 set(CMAKE_C_COMPILER_ID "GNU")
 

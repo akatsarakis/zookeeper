@@ -177,33 +177,9 @@ CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o.provides: CMakeFiles/zookeeper
 CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o.provides.build: CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o
 
 
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o: CMakeFiles/zookeeper.dir/flags.make
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o: ../src/zookeeper/worker.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building C object CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/zookeeper/worker.c
-
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/vasilis/Documents/houston/zookeeper/src/zookeeper/worker.c > CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.i
-
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/vasilis/Documents/houston/zookeeper/src/zookeeper/worker.c -o CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.s
-
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.requires:
-
-.PHONY : CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.requires
-
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.provides: CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.requires
-	$(MAKE) -f CMakeFiles/zookeeper.dir/build.make CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.provides.build
-.PHONY : CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.provides
-
-CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.provides.build: CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o
-
-
 CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o: CMakeFiles/zookeeper.dir/flags.make
 CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o: ../src/zookeeper/stats.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building C object CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building C object CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/zookeeper/stats.c
 
 CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.i: cmake_force
@@ -227,7 +203,7 @@ CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o.provides.build: CMakeFiles/zook
 
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o: CMakeFiles/zookeeper.dir/flags.make
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o: ../src/libhrd/hrd_util.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building C object CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building C object CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/libhrd/hrd_util.c
 
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.i: cmake_force
@@ -251,7 +227,7 @@ CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o.provides.build: CMakeFiles/zook
 
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o: CMakeFiles/zookeeper.dir/flags.make
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o: ../src/libhrd/hrd_conn.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building C object CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building C object CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/libhrd/hrd_conn.c
 
 CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.i: cmake_force
@@ -275,7 +251,7 @@ CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o.provides.build: CMakeFiles/zook
 
 CMakeFiles/zookeeper.dir/src/mica/city.c.o: CMakeFiles/zookeeper.dir/flags.make
 CMakeFiles/zookeeper.dir/src/mica/city.c.o: ../src/mica/city.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building C object CMakeFiles/zookeeper.dir/src/mica/city.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building C object CMakeFiles/zookeeper.dir/src/mica/city.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/mica/city.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/mica/city.c
 
 CMakeFiles/zookeeper.dir/src/mica/city.c.i: cmake_force
@@ -299,7 +275,7 @@ CMakeFiles/zookeeper.dir/src/mica/city.c.o.provides.build: CMakeFiles/zookeeper.
 
 CMakeFiles/zookeeper.dir/src/mica/mica.c.o: CMakeFiles/zookeeper.dir/flags.make
 CMakeFiles/zookeeper.dir/src/mica/mica.c.o: ../src/mica/mica.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building C object CMakeFiles/zookeeper.dir/src/mica/mica.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building C object CMakeFiles/zookeeper.dir/src/mica/mica.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/zookeeper.dir/src/mica/mica.c.o   -c /home/vasilis/Documents/houston/zookeeper/src/mica/mica.c
 
 CMakeFiles/zookeeper.dir/src/mica/mica.c.i: cmake_force
@@ -328,7 +304,6 @@ zookeeper_OBJECTS = \
 "CMakeFiles/zookeeper.dir/src/zookeeper/main.c.o" \
 "CMakeFiles/zookeeper.dir/src/zookeeper/follower.c.o" \
 "CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o" \
-"CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o" \
 "CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o" \
 "CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o" \
 "CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o" \
@@ -343,7 +318,6 @@ zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/cache.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/main.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/follower.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o
-zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o
@@ -351,7 +325,7 @@ zookeeper: CMakeFiles/zookeeper.dir/src/mica/city.c.o
 zookeeper: CMakeFiles/zookeeper.dir/src/mica/mica.c.o
 zookeeper: CMakeFiles/zookeeper.dir/build.make
 zookeeper: CMakeFiles/zookeeper.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Linking C executable zookeeper"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Linking C executable zookeeper"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/zookeeper.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -364,7 +338,6 @@ CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/cache.
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/main.c.o.requires
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/follower.c.o.requires
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/leader.c.o.requires
-CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/worker.c.o.requires
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/zookeeper/stats.c.o.requires
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/libhrd/hrd_util.c.o.requires
 CMakeFiles/zookeeper.dir/requires: CMakeFiles/zookeeper.dir/src/libhrd/hrd_conn.c.o.requires
