@@ -4,18 +4,13 @@
 // 1059 lines before refactoring
 void *leader(void *arg)
 {
-	int poll_i, i, j;
 	struct thread_params params = *(struct thread_params *) arg;
 	uint16_t t_id = params.id;
-	uint16_t follower_qp_i = t_id % FOLLOWER_QP_NUM;
   uint16_t follower_id = t_id;
-  //uint64_t local_w_id = 1;
 
 	if (ENABLE_MULTICAST == 1 && t_id == 0)
 		cyan_printf("MULTICAST IS ENABLED\n");
-
 	int protocol = LEADER;
-
 
 	int *recv_q_depths, *send_q_depths;
   set_up_queue_depths_ldr_flr(&recv_q_depths, &send_q_depths, protocol);
@@ -31,7 +26,6 @@ void *leader(void *arg)
   uint32_t w_buf_push_ptr = 0, w_buf_pull_ptr = 0;
   struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf); // leave a slot for the credits
   volatile struct  w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
-//  if (t_id == 0) printf("ack buffer starts at %llu, w buffer starts at %llu\n", ack_buffer, w_buffer);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
 	---------------------------------------------------------------------------*/
@@ -71,9 +65,8 @@ void *leader(void *arg)
   struct ibv_wc w_recv_wc[LDR_MAX_RECV_W_WRS];
   struct ibv_recv_wr w_recv_wr[LDR_MAX_RECV_W_WRS];
 
-  // FC_QP_ID 2: send Credits  -- receive Credits
-  struct ibv_send_wr credit_send_wr[LDR_MAX_CREDIT_WRS];
-  struct ibv_sge credit_sgl, credit_recv_sgl;
+  // FC_QP_ID 2: receive Credits (LDR Does not send credits)
+  struct ibv_sge credit_recv_sgl;
   struct ibv_wc credit_wc[LDR_MAX_CREDIT_RECV];
   struct ibv_recv_wr credit_recv_wr[LDR_MAX_CREDIT_RECV];
 
@@ -90,8 +83,6 @@ void *leader(void *arg)
                  (uint32_t)LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl,
                  (void*) ack_buffer);
 
-
-
 	//req_type measured_req_flag = NO_REQ;
 	struct local_latency local_measure = {
 			.measured_local_region = -1,
@@ -105,8 +96,6 @@ void *leader(void *arg)
 	};
 	if (MEASURE_LATENCY && t_id == 0)
 		latency_info.key_to_measure = malloc(sizeof(struct cache_key));
-
-
 
 	struct cache_op *ops;
   struct commit_fifo *com_fifo;
@@ -132,8 +121,8 @@ void *leader(void *arg)
 		---------------------------------------------------------------------------*/
 
 	if (WRITE_RATIO > 0) {
-    set_up_credits_and_WRs(credits, credit_send_wr, &credit_sgl, credit_recv_wr,
-													 &credit_recv_sgl, cb, protocol, LDR_MAX_CREDIT_WRS, LDR_MAX_CREDIT_RECV);
+    ldr_set_up_credits_and_WRs(credits, credit_recv_wr,
+                               &credit_recv_sgl, cb, LDR_MAX_CREDIT_RECV);
 		set_up_ldr_WRs(prep_send_wr, prep_send_sgl, ack_recv_wr, ack_recv_sgl,
                    com_send_wr, com_send_sgl, w_recv_wr, w_recv_sgl,
                    t_id, follower_id, cb, prep_mr, com_mr, mcast);
@@ -145,20 +134,16 @@ void *leader(void *arg)
 	/* ---------------------------------------------------------------------------
 	------------------------------LATENCY AND DEBUG-----------------------------------
 	---------------------------------------------------------------------------*/
-	uint32_t stalled_counter = 0;
   uint32_t wait_for_gid_dbg_counter = 0, wait_for_acks_dbg_counter = 0;
   uint32_t credit_debug_cnt[LDR_VC_NUM] = {0};
   uint32_t outstanding_prepares = 0;
-	uint8_t stalled = 0, debug_polling = 0;
 	struct timespec start, end;
-	uint16_t debug_ptr = 0;
 	green_printf("Leader %d  reached the loop \n", t_id);
-//  if (t_id == 1) exit(0);
+
 	/* ---------------------------------------------------------------------------
 	------------------------------START LOOP--------------------------------
 	---------------------------------------------------------------------------*/
 	while(true) {
-//
 
      if (ENABLE_ASSERTIONS)
        ldr_check_debug_cntrs(credit_debug_cnt, &wait_for_acks_dbg_counter,
@@ -172,8 +157,6 @@ void *leader(void *arg)
                     credits, cb->dgram_recv_cq[PREP_ACK_QP_ID], ack_recv_wc, ack_recv_info,
                     remote_prep_buf,
                     t_id, &wait_for_acks_dbg_counter, &outstanding_prepares);
-
-
 
 
 /* ---------------------------------------------------------------------------
@@ -197,18 +180,15 @@ void *leader(void *arg)
                         com_send_sgl, com_send_wr, credit_recv_wr,
                         w_recv_info, t_id);
 
-
-
-
     /* ---------------------------------------------------------------------------
     ------------------------------PROBE THE CACHE--------------------------------------
     ---------------------------------------------------------------------------*/
 
 
 		// Propagate the updates before probing the cache
-		trace_iter = leader_batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
-                                                  p_writes, resp,
-                                                  &latency_info, &start);
+		trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
+                                           (uint8_t)FOLLOWER_MACHINE_NUM, p_writes, resp,
+                                           &latency_info, &start, protocol);
 
 
     /* ---------------------------------------------------------------------------
@@ -244,24 +224,6 @@ void *leader(void *arg)
       assert (p_writes->w_state[ptr] == INVALID);
     }
 
-//		/* ---------------------------------------------------------------------------
-//		------------------------------SEND CREDITS--------------------------------
-//		---------------------------------------------------------------------------*/
-//		if (WRITE_RATIO > 0) {
-//			/* Find out how many buffer slots have been emptied and create the appropriate
-//				credit messages, for the different types of buffers (Acks, Invs, Upds)
-//				If credits must be sent back, then receives for new coherence messages have to be posted first*/
-//			credit_wr_i = forge_credits_LIN(coh_message_count, acks_seen, invs_seen, upds_seen, t_id,
-//											credit_send_wr, &credit_tx,
-//											cb, coh_recv_cq, ack_recv_wc);
-//			if (credit_wr_i > 0)
-//				send_credits(credit_wr_i, ack_recv_sgl, cb, &ack_buf_push_ptr, ack_recv_wr, cb->dgram_qp[BROADCAST_UD_QP_ID],
-//							 credit_send_wr, (uint16_t)CREDITS_IN_MESSAGE, (uint32_t)LIN_CLT_BUF_SLOTS, (void*)ack_buffer);
-//		}
-
-
-//		op_i = 0; bool is_leader_t = true;
-//		run_through_rest_of_ops(ops, next_ops, resp, next_resp, &op_i, &next_op_i, t_id, &latency_info, is_leader_t);
 
 	}
 	return NULL;

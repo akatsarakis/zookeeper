@@ -3,7 +3,6 @@
 
 void *follower(void *arg)
 {
-  int poll_i, i, j;
   struct thread_params params = *(struct thread_params *) arg;
   int global_id = machine_id > LEADER_MACHINE ? ((machine_id - 1) * FOLLOWERS_PER_MACHINE) + params.id :
                   (machine_id * FOLLOWERS_PER_MACHINE) + params.id;
@@ -75,16 +74,13 @@ void *follower(void *arg)
   struct ibv_wc com_recv_wc[FLR_MAX_RECV_COM_WRS];
   struct ibv_recv_wr com_recv_wr[FLR_MAX_RECV_COM_WRS];
 
-  // FC_QP_ID 2: send Credits  -- receive Credits
+  // FC_QP_ID 2: send Credits  (Follower does not receive credits)
   struct ibv_send_wr credit_send_wr[FLR_MAX_CREDIT_WRS];
-  struct ibv_sge credit_send_sgl, credit_recv_sgl;
-  struct ibv_wc credit_wc[FLR_MAX_CREDIT_RECV];
-  struct ibv_recv_wr credit_recv_wr[FLR_MAX_CREDIT_RECV];
+  struct ibv_sge credit_send_sgl;
   uint16_t credits = W_CREDITS;
 
   uint32_t credit_debug_cnt = 0, outstanding_writes = 0;
   long trace_iter = 0, sent_ack_tx = 0, credit_tx = 0, w_tx = 0;
-  //req_type measured_req_flag = NO_REQ;
   struct local_latency local_measure = {
     .measured_local_region = -1,
     .local_latency_start_polling = 0,
@@ -139,9 +135,8 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------LATENCY AND DEBUG-----------------------------------
   ---------------------------------------------------------------------------*/
-  uint32_t stalled_counter = 0, wait_for_gid_dbg_counter = 0, credit_dbg_counter = 0,
+  uint32_t wait_for_gid_dbg_counter = 0,
     wait_for_prepares_dbg_counter = 0, wait_for_coms_dbg_counter = 0;
-  uint8_t stalled = 0, debug_polling = 0;
   struct timespec start, end;
   uint16_t debug_ptr = 0;
   green_printf("Follower %d  reached the loop \n", t_id);
@@ -165,7 +160,7 @@ void *follower(void *arg)
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
     send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
-                     prep_recv_info, com_recv_info, flr_id,  ack, p_acks, t_id);
+                     prep_recv_info, flr_id,  ack, p_acks, t_id);
 
     /* ---------------------------------------------------------------------------
     ------------------------------POLL FOR COMMITS---------------------------------
@@ -186,8 +181,8 @@ void *follower(void *arg)
   ---------------------------------------------------------------------------*/
 
   // Propagate the updates before probing the cache
-    trace_iter = flr_batch_from_trace_to_cache(trace_iter, t_id, trace, ops, flr_id,
-                                               p_writes, resp, &latency_info, &start);
+    trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops, flr_id,
+                                           p_writes, resp, &latency_info, &start, protocol);
 
 
 

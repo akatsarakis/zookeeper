@@ -76,12 +76,6 @@ struct mica_op {
 	uint8_t value[MICA_MAX_VALUE];
 };
 
-struct wrkr_coalesce_mica_op {
-	struct mica_key key;
-	uint8_t opcode;
-	uint8_t val_len;
-	uint8_t value[WRKR_COALESCING_BUF_SLOT_SIZE];
-};
 
 struct mica_slot {
 	uint32_t in_use	:1;
@@ -119,17 +113,6 @@ struct mica_kv {
 	long long num_index_evictions; /* Number of entries evicted from index */
 };
 
-
-struct ud_req {
-	struct ibv_grh grh;
-	struct mica_op m_op;
-};
-
-struct wrkr_ud_req {
-	struct ibv_grh grh;
-	struct mica_op m_op;
-	uint8_t extra_bytes[EXTRA_WORKER_REQ_BYTES];
-};
 
 void mica_init(struct mica_kv *kv,
 			   int instance_id, int node_id, int num_bkts, u_int64_t log_cap);

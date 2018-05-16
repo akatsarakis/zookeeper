@@ -113,7 +113,7 @@ void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb) {
     }
 }
 
-
+// Parse a trace, use this for skewed workloads as uniform trace can be manufactured easilly
 int parse_trace(char* path, struct trace_command **cmds, int gid){
     FILE * fp;
     ssize_t read;
@@ -227,7 +227,7 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
 }
 
 
-// Manufactures a trace without a file
+// Manufactures a trace with a uniform distrbution without a backing file
 void manufacture_trace(struct trace_command **cmds, int g_id)
 {
   (*cmds) = (struct trace_command *)malloc((TRACE_SIZE + 1) * sizeof(struct trace_command));
@@ -261,6 +261,7 @@ void manufacture_trace(struct trace_command **cmds, int g_id)
   //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
 }
 
+// Initiialize the trace
 void trace_init(struct trace_command **cmds, int g_id) {
     //create the trace path path
     if (FEED_FROM_TRACE == 1) {
@@ -294,63 +295,37 @@ void trace_init(struct trace_command **cmds, int g_id) {
 }
 
 void dump_stats_2_file(struct stats* st){
-    uint8_t typeNo =LEADER;
+    uint8_t typeNo = LEADER;
     assert(typeNo >=0 && typeNo <=3);
     int i = 0;
     char filename[128];
     FILE *fp;
     double total_MIOPS;
-    char* path = "../../results/scattered-results/";
-    const char * exectype[] = {
-            "BS", //baseline
-            "SC", //Sequential Consistency
-            "LIN", //Linearizability (non stalling)
-            "SS" //Strong Consistency (stalling)
-    };
+    char* path = "../../results/scattered-results";
 
-    sprintf(filename, "%s/%s_%s_%s_s_%d_a_%d_v_%d_m_%d_c_%d_w_%d_r_%d%s-%d.csv", path,
-            DISABLE_CACHE == 1 ? "BS" : exectype[typeNo],
-            LOAD_BALANCE == 1 ? "UNIF" : "SKEW",
-            (ENABLE_WORKERS_CRCW == 1 ? "CRCW" : (EMULATING_CREW == 1 ? "CREW" : "EREW")),
-            DISABLE_CACHE == 0 && typeNo == 2 && ENABLE_MULTIPLE_SESSIONS != 0 && SESSIONS_PER_THREAD != 0 ? SESSIONS_PER_THREAD: 0,
-            SKEW_EXPONENT_A,
+    sprintf(filename, "%s/%s_s_%d__v_%d_m_%d_l_%d_f_%d_r_%d-%d.csv", path,
+            "ZK",
+            SESSIONS_PER_THREAD,
             USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + BASE_VALUE_SIZE): BASE_VALUE_SIZE,
             MACHINE_NUM, LEADERS_PER_MACHINE,
             FOLLOWERS_PER_MACHINE, WRITE_RATIO,
-            BALANCE_HOT_WRITES == 1  ? "_lbw" : "",
             machine_id);
     printf("%s\n", filename);
     fp = fopen(filename, "w"); // "w" means that we are going to write on this file
     fprintf(fp, "machine_id: %d\n", machine_id);
-    fprintf(fp, "comment: worker ID, total MIOPS, local MIOPS, remote MIOPS\n");
 
-    for(i = 0; i < FOLLOWERS_PER_MACHINE; ++i){
-        total_MIOPS = st->locals_per_worker[i] + st->remotes_per_worker[i];
-        fprintf(fp, "worker: %d, %.2f, %.2f, %.2f\n", i, total_MIOPS,
-                st->locals_per_worker[i], st->remotes_per_worker[i]);
+    fprintf(fp, "comment: thread ID, total MIOPS,"
+            "preps sent, coms sent, acks sent, "
+            "received preps, received coms, received acks\n");
+    for(i = 0; i < THREADS_PER_MACHINE; ++i){
+        total_MIOPS = st->cache_hits_per_thread[i];
+        fprintf(fp, "client: %d, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n",
+                i, total_MIOPS, st->cache_hits_per_thread[i], st->preps_sent[i],
+                st->coms_sent[i], st->acks_sent[i],
+                st->received_preps[i],st->received_coms[i],
+                st->received_acks[i]);
     }
 
-    fprintf(fp, "comment: client ID, total MIOPS, cache MIOPS, local MIOPS,"
-            "remote MIOPS, updates, invalidates, acks, received updates,"
-            "received invalidates, received acks\n");
-    for(i = 0; i < LEADERS_PER_MACHINE; ++i){
-        total_MIOPS = st->cache_hits_per_client[i] +
-                      st->locals_per_client[i] + st->remotes_per_client[i];
-        fprintf(fp, "client: %d, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n",
-                i, total_MIOPS, st->cache_hits_per_client[i], st->locals_per_client[i],
-                st->remotes_per_client[i], st->updates_per_client[i],
-                st->invs_per_client[i], st->acks_per_client[i],
-                st->received_updates_per_client[i], st->received_invs_per_client[i],
-                st->received_acks_per_client[i]);
-    }
-
-    /*
-    fprintf(fp, "comment: cache MIOPS\n");
-    fprintf(fp, "cache: %.2f\n", cache_MIOPS);
-    machine_MIOPS += cache_MIOPS;
-    fprintf(fp, "comment: machine MIOPS\n");
-    fprintf(fp, "machine: %.2f\n", machine_MIOPS);
-    */
     fclose(fp);
 }
 
@@ -413,7 +388,6 @@ int pin_threads_avoiding_collisions(int c_id) {
 }
 
 
-
 // Used by all kinds of threads to publish their QPs
 void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb)
 {
@@ -470,10 +444,7 @@ void init_fifo(struct fifo **fifo, uint32_t max_size, uint32_t fifos_num)
     (*fifo)[i].fifo = malloc(max_size);
     memset((*fifo)[i].fifo, 0, max_size);
   }
-
-
 }
-
 
 // Set up the receive info
 void init_recv_info(struct recv_info **recv, uint32_t push_ptr, uint32_t buf_slots,
@@ -551,12 +522,12 @@ void set_up_queue_depths_ldr_flr(int** recv_q_depths, int** send_q_depths, int p
   /* -------LEADER-------------
   * 1st Dgram send Prepares -- receive ACKs
   * 2nd Dgram send Commits  -- receive Writes
-  * 3rd Dgram send Credits  -- receive Credits
+  * 3rd Dgram  receive Credits
   *
     * ------FOLLOWER-----------
   * 1st Dgram receive prepares -- send Acks
   * 2nd Dgram receive Commits  -- send Writes
-  * 3rd Dgram receive Credits  -- send Credits
+  * 3rd Dgram  send Credits
   * */
   if (protocol == FOLLOWER) {
     *send_q_depths = malloc(FOLLOWER_QP_NUM * sizeof(int));
@@ -696,32 +667,14 @@ void set_up_ldr_WRs(struct ibv_send_wr *prep_send_wr, struct ibv_sge *prep_send_
 
 // The Leader sends credits to the followers when it receives their writes
 // The follower sends credits to the leader when it receives commit messages
-void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
-                        struct ibv_sge* credit_send_sgl, struct ibv_recv_wr* credit_recv_wr,
-                        struct ibv_sge* credit_recv_sgl, struct hrd_ctrl_blk *cb, int protocol,
-                        uint32_t max_credit_wrs, uint32_t max_credit_recvs)
+void ldr_set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_recv_wr *credit_recv_wr,
+                                struct ibv_sge *credit_recv_sgl, struct hrd_ctrl_blk *cb,
+                                uint32_t max_credit_recvs)
 {
   int i = 0;
-//  int max_credt_wrs = protocol == FOLLOWER ?  SC_MAX_CREDIT_WRS : MAX_CREDIT_WRS;
-//  int max_credit_recvs = protocol == FOLLOWER ? SC_MAX_CREDIT_RECVS : MAX_CREDIT_RECVS;
-  // Credits
-  if (protocol == FOLLOWER)
-    ;//for (i = 0; i < MACHINE_NUM; i++) credits[SC_UPD_VC][i] = SC_CREDITS;
-  else {
-    for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
-      credits[PREP_VC][i] = PREPARE_CREDITS;
-      credits[COMM_VC][i] = COMMIT_CREDITS;
-    }
-  }
-  // Credit WRs
-  for (i = 0; i < max_credit_wrs; i++) {
-    credit_send_sgl->length = 0;
-    credit_send_wr[i].opcode = IBV_WR_SEND; // No immediate is required for the credits
-    credit_send_wr[i].num_sge = 0;
-    credit_send_wr[i].sg_list = credit_send_sgl;
-    credit_send_wr[i].wr.ud.remote_qkey = HRD_DEFAULT_QKEY;
-    credit_send_wr[i].next = NULL;
-    credit_send_wr[i].send_flags = IBV_SEND_INLINE;
+  for (i = 0; i < FOLLOWER_MACHINE_NUM; i++) {
+    credits[PREP_VC][i] = PREPARE_CREDITS;
+    credits[COMM_VC][i] = COMMIT_CREDITS;
   }
   //Credit Receives
   credit_recv_sgl->length = 64;

@@ -6,16 +6,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-//<vasilis> Multicast
+//Multicast
 #include <rdma/rdma_cma.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <byteswap.h>
 #include <netinet/in.h>
 #include <netdb.h>
-// <vasilis>
+//
 
-#define DGRAM_BUF_SIZE 4096
+
 
 extern uint64_t seed;
 
@@ -24,33 +24,34 @@ extern uint64_t seed;
 ---------------------------------------------------------------------------*/
 struct stats {
 
-	double remotes_per_worker[FOLLOWERS_PER_MACHINE];
-	double locals_per_worker[FOLLOWERS_PER_MACHINE];
-	double batch_size_per_worker[FOLLOWERS_PER_MACHINE];
-	double aver_reqs_polled_per_worker[FOLLOWERS_PER_MACHINE];
+	double remotes_per_worker[THREADS_PER_MACHINE];
+	double locals_per_worker[THREADS_PER_MACHINE];
+	double batch_size_per_worker[THREADS_PER_MACHINE];
+	double aver_reqs_polled_per_worker[THREADS_PER_MACHINE];
 
 
-	double batch_size_per_client[LEADERS_PER_MACHINE];
-	double stalled_time_per_client[LEADERS_PER_MACHINE];
-	double empty_reqs_per_client[LEADERS_PER_MACHINE];
-	double cache_hits_per_client[LEADERS_PER_MACHINE];
-	double remotes_per_client[LEADERS_PER_MACHINE];
-	double locals_per_client[LEADERS_PER_MACHINE];
-	double average_coalescing_per_client[LEADERS_PER_MACHINE];
+	double batch_size_per_client[THREADS_PER_MACHINE];
+	double stalled_gid[THREADS_PER_MACHINE];
+  double stalled_ack_prep[THREADS_PER_MACHINE];
+  double stalled_com_credit[THREADS_PER_MACHINE];
 
-	double updates_per_client[LEADERS_PER_MACHINE];
-	double acks_per_client[LEADERS_PER_MACHINE];
-	double invs_per_client[LEADERS_PER_MACHINE];
+	double empty_reqs_per_client[THREADS_PER_MACHINE];
+	double cache_hits_per_thread[THREADS_PER_MACHINE];
+	double remotes_per_client[THREADS_PER_MACHINE];
+	double locals_per_client[THREADS_PER_MACHINE];
+	double average_coalescing_per_client[THREADS_PER_MACHINE];
 
-	double received_updates_per_client[LEADERS_PER_MACHINE];
-	double received_acks_per_client[LEADERS_PER_MACHINE];
-	double received_invs_per_client[LEADERS_PER_MACHINE];
+	double preps_sent[THREADS_PER_MACHINE];
+	double acks_sent[THREADS_PER_MACHINE];
+	double coms_sent[THREADS_PER_MACHINE];
 
-	double write_ratio_per_client[LEADERS_PER_MACHINE];
+	double received_coms[THREADS_PER_MACHINE];
+	double received_acks[THREADS_PER_MACHINE];
+	double received_preps[THREADS_PER_MACHINE];
+
+	double write_ratio_per_client[THREADS_PER_MACHINE];
 };
 void dump_stats_2_file(struct stats* st);
-void append_throughput(double);
-void window_stats(struct extended_cache_op *op, struct mica_resp *resp);
 int spawn_stats_thread();
 void print_latency_stats(void);
 
@@ -115,10 +116,8 @@ void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struc
 int parse_trace(char* path, struct trace_command **cmds, int gid);
 
 
-void set_up_the_buffer_space(uint16_t[], uint32_t[], uint32_t[]);
 void trace_init(struct trace_command **cmds, int g_id);
 void init_multicast(struct mcast_info**, struct mcast_essentials**, int, struct hrd_ctrl_blk*, int);
-void set_up_queue_depths(int**, int**, int);
 // Connect with Workers and Clients
 void setup_connections_and_spawn_stats_thread(int, struct hrd_ctrl_blk *);
 
@@ -163,11 +162,10 @@ void set_up_ldr_ops(struct cache_op**, struct mica_resp**,
 // Set up the memory registrations required in the leader if there is no Inlining
 void set_up_ldr_mrs(struct ibv_mr**, void*, struct ibv_mr**, void*,
                     struct hrd_ctrl_blk*);
-// Set up the credits for leader and follower
-void set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_send_wr* credit_send_wr,
-                            struct ibv_sge* credit_send_sgl, struct ibv_recv_wr* credit_recv_wr,
-                            struct ibv_sge* credit_recv_sgl, struct hrd_ctrl_blk *cb, int protocol,
-                            uint32_t max_credit_wrs, uint32_t max_credit_recvs);
+// Set up the credits for leader
+void ldr_set_up_credits_and_WRs(uint16_t credits[][FOLLOWER_MACHINE_NUM], struct ibv_recv_wr *credit_recv_wr,
+                                struct ibv_sge *credit_recv_sgl, struct hrd_ctrl_blk *cb,
+                                uint32_t max_credit_recvs);
 // Manufactures a trace without a file
 void manufacture_trace(struct trace_command **cmds, int g_id);
 
@@ -184,7 +182,7 @@ int pin_thread(int t_id);
 // pin a thread avoid collisions with pin_thread()
 int pin_threads_avoiding_collisions(int c_id);
 
-
+void print_latency_stats(void);
 
 
 

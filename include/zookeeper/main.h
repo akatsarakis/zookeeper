@@ -1,5 +1,5 @@
-#ifndef ARMONIA_MAIN_H
-#define ARMONIA_MAIN_H
+#ifndef ZOOKEEPER_MAIN_H
+#define ZOOKEEPER_MAIN_H
 
 #include <stdint.h>
 #include <pthread.h>
@@ -18,9 +18,9 @@
 #define WORKER_HYPERTHREADING 1
 #define MAX_SERVER_PORTS 1 // better not change that
 
-
-#define FOLLOWERS_PER_MACHINE 19
-#define LEADERS_PER_MACHINE (FOLLOWERS_PER_MACHINE)
+#define THREADS_PER_MACHINE 4
+#define FOLLOWERS_PER_MACHINE (THREADS_PER_MACHINE)
+#define LEADERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define MACHINE_NUM 3
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
@@ -30,7 +30,8 @@
 
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 
-
+#define ENABLE_MULTIPLE_SESSIONS 1
+#define SESSIONS_PER_THREAD 80
 
 
 #define ENABLE_WORKERS_CRCW 1
@@ -79,7 +80,7 @@
 #define MCAST_GROUPS_NUM 2
 
 // ------COMMON-------------------
-#define MAX_BCAST_BATCH (ENABLE_MULTICAST == 1 ? 4 : 4) //8 //(128 / (MACHINE_NUM - 1)) // how many broadcasts can fit in a batch
+#define MAX_BCAST_BATCH (ENABLE_MULTICAST == 1 ? 4 : 4) //how many broadcasts can fit in a batch
 #define MESSAGES_IN_BCAST (ENABLE_MULTICAST == 1 ? 1 : (FOLLOWER_MACHINE_NUM))
 #define MESSAGES_IN_BCAST_BATCH MAX_BCAST_BATCH * MESSAGES_IN_BCAST //must be smaller than the q_depth
 
@@ -90,12 +91,12 @@
  * --------------------------------------------------------------------------------*/
 #define FOLLOWER 1
 #define LEADER 2
-#define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 100
+
 #define MIN_SS_BATCH 127// The minimum SS batch
 #define ENABLE_ASSERTIONS 1
 #define ENABLE_STAT_COUNTING 1
 #define MAXIMUM_INLINE_SIZE 188
+#define DISABLE_GID_ORDERING 0
 
 //--------FOLOWER Flow Control
 #define W_CREDITS 15
@@ -142,7 +143,7 @@
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
 
 //---WRITES---
-#define MAX_W_COALESCE 6
+#define MAX_W_COALESCE 4
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
 #define W_SIZE (VALUE_SIZE + WRITE_HEADER)
 #define FLR_W_SEND_SIZE (MAX_W_COALESCE * W_SIZE)
@@ -150,7 +151,7 @@
 #define FLR_W_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 12
+#define MAX_PREP_COALESCE 15
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
@@ -174,7 +175,7 @@
 //--------FOLLOWER--------------
 // // PREP_ACK_QP_ID 0: receive Prepares -- send ACKs
 #define FLR_MAX_ACK_WRS (1)
-#define FLR_MAX_RECV_PREP_WRS (PREPARE_CREDITS) // if not enough prep messges get lost
+#define FLR_MAX_RECV_PREP_WRS (3 * PREPARE_CREDITS) // if not enough prep messges get lost
 // COMMIT_W_QP_ID 1: send Writes  -- receive Commits
 #define FLR_MAX_W_WRS (W_CREDITS)
 #define FLR_MAX_RECV_COM_WRS (COMMIT_CREDITS)
@@ -199,7 +200,7 @@
 
 
 //--FOLLOWER
-#define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
+#define FLR_PREP_BUF_SLOTS (6 * PREPARE_CREDITS)
 #define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE * FLR_PREP_BUF_SLOTS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
@@ -227,31 +228,31 @@
  * -------LEADER-------------
  * 1st Dgram send Prepares -- receive ACKs
  * 2nd Dgram send Commits  -- receive Writes
- * 3rd Dgram send Credits  -- receive Credits
+ * 3rd Dgram  -- receive Credits
  *
  * ------FOLLOWER-----------
  * 1st Dgram receive prepares -- send Acks
  * 2nd Dgram receive Commits  -- send Writes
- * 3rd Dgram receive Credits  -- send Credits
+ * 3rd Dgram  send Credits
  * */
 
 // LDR - Receive
-#define LDR_RECV_ACK_Q_DEPTH 500 //(LDR_MAX_RECV_ACK_WRS + 3)
-#define LDR_RECV_W_Q_DEPTH 500 //(LDR_MAX_RECV_W_WRS + 3)
-#define LDR_RECV_CR_Q_DEPTH 500 //()
+#define LDR_RECV_ACK_Q_DEPTH (LDR_MAX_RECV_ACK_WRS + 3)
+#define LDR_RECV_W_Q_DEPTH  (LDR_MAX_RECV_W_WRS + 3) //
+#define LDR_RECV_CR_Q_DEPTH (LDR_MAX_CREDIT_RECV + 3) //()
 // LDR - Send
-#define LDR_SEND_PREP_Q_DEPTH 500 //(LDR_MAX_RECV_ACK_WRS + 3)
-#define LDR_SEND_COM_Q_DEPTH 500 //(LDR_MAX_RECV_W_WRS + 3)
-#define LDR_SEND_CR_Q_DEPTH 500 //()
+#define LDR_SEND_PREP_Q_DEPTH ((PREP_BCAST_SS_BATCH * FOLLOWER_MACHINE_NUM) + 10 ) //
+#define LDR_SEND_COM_Q_DEPTH ((COM_BCAST_SS_BATCH * FOLLOWER_MACHINE_NUM) + 10 ) //
+#define LDR_SEND_CR_Q_DEPTH 1 //()
 
 // FLR - Receive
-#define FLR_RECV_PREP_Q_DEPTH 500 //
-#define FLR_RECV_COM_Q_DEPTH 500 //
+#define FLR_RECV_PREP_Q_DEPTH (FLR_MAX_RECV_PREP_WRS + 3) //
+#define FLR_RECV_COM_Q_DEPTH (FLR_MAX_RECV_COM_WRS + 3) //
 #define FLR_RECV_CR_Q_DEPTH 1 //()
 // FLR - Send
-#define FLR_SEND_ACK_Q_DEPTH 500 //
-#define FLR_SEND_W_Q_DEPTH 500 //
-#define FLR_SEND_CR_Q_DEPTH 500 //
+#define FLR_SEND_ACK_Q_DEPTH (ACK_SEND_SS_BATCH + 3) //
+#define FLR_SEND_W_Q_DEPTH (WRITE_SS_BATCH + 3) //
+#define FLR_SEND_CR_Q_DEPTH (COM_CREDIT_SS_BATCH + 3) //
 
 
 // DEBUG
@@ -262,18 +263,6 @@
 
 
 
-/* ----------------
- * -------------OLD STUFF
- * ---------------------------*/
-
-
-// WORKERS synchronization options
-#if ENABLE_WORKERS_CRCW == 1
-extern struct mica_kv kv;
-# define KVS_BATCH_OP mica_batch_op_crcw
-#else /*ENABLE_WORKERS_CRCW == 0*/
-# define KVS_BATCH_OP mica_batch_op
-#endif
 //LATENCY Measurment
 #define MAX_LATENCY 400 //in us
 #define LATENCY_BUCKETS 200 //latency accuracy
@@ -403,7 +392,6 @@ struct w_message {
 
 
 struct w_message_ud_req {
-//  struct ibv_grh grh; // compiler puts padding with this
   uint8_t unused[GRH_SIZE];
   struct w_message w_mes;
 };
@@ -510,12 +498,14 @@ struct thread_stats { // 2 cache lines
   long long received_writes_mes_num;
 
 	long long remote_messages_per_client;
-	long long cold_keys_per_trace;
+
 	long long batches_per_client;
 
-	long long stalled_time_per_client;
+	uint64_t stalled_gid;
+  uint64_t stalled_ack_prep;
+  uint64_t stalled_com_credit;
 
-	double empty_reqs_per_trace;
+
 	long long wasted_loops;
 	double tot_empty_reqs_per_trace;
 
@@ -523,44 +513,11 @@ struct thread_stats { // 2 cache lines
 	//long long unused[3]; // padding to avoid false sharing
 };
 
-
-struct follower_stats { // 1 cache line
-	long long cache_hits_per_thread;
-	long long remotes_per_client;
-	long long locals_per_client;
-
-	long long updates_per_client;
-	long long acks_per_client;  //only LIN
-	long long invs_per_client; //only LIN
-
-	long long received_updates_per_client;
-	long long received_acks_per_client; //only LIN
-	long long received_invs_per_client; //only LIN
-
-	long long remote_messages_per_client;
-	long long cold_keys_per_trace;
-	long long batches_per_client;
-
-	long long stalled_time_per_client;
-
-	double empty_reqs_per_trace;
-	long long wasted_loops;
-	double tot_empty_reqs_per_trace;
-
-	long long unused[4]; // padding to avoid false sharing
-};
-
-
-// a client sends to a particular ud qp to all workers, therefore to better utilize its L1 cache
-// we store worker AHs by QP instead of by worker id
 extern struct remote_qp remote_follower_qp[FOLLOWER_MACHINE_NUM][FOLLOWERS_PER_MACHINE][FOLLOWER_QP_NUM];
 extern struct remote_qp remote_leader_qp[LEADERS_PER_MACHINE][LEADER_QP_NUM];
 extern atomic_char qps_are_set_up;
-extern atomic_char local_recv_flag[FOLLOWERS_PER_MACHINE][LEADERS_PER_MACHINE][64]; //false sharing problem -- fixed with padding
 extern struct thread_stats t_stats[LEADERS_PER_MACHINE];
-extern struct follower_stats f_stats[FOLLOWERS_PER_MACHINE];
 struct mica_op;
-extern struct mica_op *local_req_region;
 extern atomic_uint_fast64_t global_w_id, committed_global_w_id;
 
 struct thread_params {
@@ -582,12 +539,11 @@ struct local_latency {
 	char* flag_to_poll;
 };
 
-//extern uint8_t protocol;
-extern optik_lock_t kv_lock;
+
 extern struct latency_counters latency_count;
 
-void *run_worker(void *arg);
 void *follower(void *arg);
 void *leader(void *arg);
 void *print_stats(void*);
+
 #endif

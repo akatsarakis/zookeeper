@@ -1,215 +1,81 @@
 #include "util.h"
 #include "inline_util.h"
 
-void *print_stats(void* no_arg)
-{
-    int j;
-    uint16_t i, print_count = 0;
-    long long all_clients_cache_hits = 0, all_workers_remotes = 0, all_workers_locals = 0;
-    double total_throughput = 0, all_clients_throughput = 0, all_workers_throughput = 0;
-//    double worker_throughput[FOLLOWERS_PER_MACHINE];
-    int sleep_time = 20;
-    struct thread_stats *curr_c_stats, *prev_c_stats;
-    curr_c_stats = (struct thread_stats*) malloc(num_threads * sizeof(struct thread_stats));
-    prev_c_stats = (struct thread_stats*) malloc(num_threads * sizeof(struct thread_stats));
-//    struct follower_stats curr_w_stats[FOLLOWERS_PER_MACHINE], prev_w_stats[FOLLOWERS_PER_MACHINE];
-    struct stats all_stats;
-    sleep(4);
-    memcpy(prev_c_stats, (void*) t_stats, num_threads * (sizeof(struct thread_stats)));
-//    memcpy(prev_w_stats, (void*) f_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
-    struct timespec start, end;
-    clock_gettime(CLOCK_REALTIME, &start);
-    while(true) {
-        sleep(sleep_time);
-        clock_gettime(CLOCK_REALTIME, &end);
-        double seconds = (end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec) / 1000000001;
-        start = end;
-        memcpy(curr_c_stats, (void*) t_stats, num_threads * (sizeof(struct thread_stats)));
+void print_latency_stats(void);
+
+void *print_stats(void* no_arg) {
+  int j;
+  uint16_t i, print_count = 0;
+  long long all_clients_cache_hits = 0;
+  double total_throughput = 0;
+
+  int sleep_time = 20;
+  struct thread_stats *curr_c_stats, *prev_c_stats;
+  curr_c_stats = (struct thread_stats *) malloc(num_threads * sizeof(struct thread_stats));
+  prev_c_stats = (struct thread_stats *) malloc(num_threads * sizeof(struct thread_stats));
+  struct stats all_stats;
+  sleep(4);
+  memcpy(prev_c_stats, (void *) t_stats, num_threads * (sizeof(struct thread_stats)));
+  struct timespec start, end;
+  clock_gettime(CLOCK_REALTIME, &start);
+  while (true) {
+    sleep(sleep_time);
+    clock_gettime(CLOCK_REALTIME, &end);
+    double seconds = (end.tv_sec - start.tv_sec) + (double) (end.tv_nsec - start.tv_nsec) / 1000000001;
+    start = end;
+    memcpy(curr_c_stats, (void *) t_stats, num_threads * (sizeof(struct thread_stats)));
 //        memcpy(curr_w_stats, (void*) f_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
-        all_clients_cache_hits = 0;  // all_workers_remotes = 0; all_workers_locals = 0;
-        print_count++;
-        if (EXIT_ON_PRINT == 1 && print_count == PRINT_NUM) {
-            if (MEASURE_LATENCY && machine_id == 0) print_latency_stats();
-            printf("---------------------------------------\n");
-            printf("------------RUN TERMINATED-------------\n");
-            printf("---------------------------------------\n");
-            exit(0);
-        }
-        seconds *= MILLION; // compute only MIOPS
-        for (i = 0; i < num_threads; i++) {
-            all_clients_cache_hits += curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread;
-            all_stats.cache_hits_per_client[i] = (curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread) / seconds;
-            all_stats.remotes_per_client[i] = (curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client) / seconds;
-            all_stats.locals_per_client[i] = (curr_c_stats[i].locals_per_client - prev_c_stats[i].locals_per_client) / seconds;
-            all_stats.updates_per_client[i] = (curr_c_stats[i].preps_sent - prev_c_stats[i].preps_sent) / seconds;
-            all_stats.invs_per_client[i] = (curr_c_stats[i].coms_sent - prev_c_stats[i].coms_sent) / seconds;
-            all_stats.acks_per_client[i] = (curr_c_stats[i].acks_sent - prev_c_stats[i].acks_sent) / seconds;
-            all_stats.received_updates_per_client[i] = (curr_c_stats[i].received_coms - prev_c_stats[i].received_coms) / seconds;
-            all_stats.received_invs_per_client[i] = (curr_c_stats[i].received_preps - prev_c_stats[i].received_preps) / seconds;
-            all_stats.received_acks_per_client[i] = (curr_c_stats[i].received_acks - prev_c_stats[i].received_acks) / seconds;
-            if (curr_c_stats[i].remote_messages_per_client - prev_c_stats[i].remote_messages_per_client > 0) {
-                all_stats.average_coalescing_per_client[i] =  ((curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client)
-                                                               /(double) (curr_c_stats[i].remote_messages_per_client - prev_c_stats[i].remote_messages_per_client));
-            }
-            if (curr_c_stats[i].batches_per_client - prev_c_stats[i].batches_per_client > 0) {
-                all_stats.batch_size_per_client[i] = (curr_c_stats[i].remotes_per_client - prev_c_stats[i].remotes_per_client) /
-                                                     (double) (curr_c_stats[i].batches_per_client - prev_c_stats[i].batches_per_client);
-                all_stats.stalled_time_per_client[i] = (curr_c_stats[i].stalled_time_per_client - prev_c_stats[i].stalled_time_per_client) /
-                                                       (double)(curr_c_stats[i].batches_per_client - prev_c_stats[i].batches_per_client);
-            }
-            else {
-                all_stats.batch_size_per_client[i] = 0;
-                all_stats.stalled_time_per_client[i] = 0;
-            }
-
-            uint32_t total_loops = curr_c_stats[i].batches_per_client - prev_c_stats[i].batches_per_client +
-                                   curr_c_stats[i].wasted_loops - prev_c_stats[i].wasted_loops;
-            if (total_loops > 0)
-                all_stats.empty_reqs_per_client[i] =  (curr_c_stats[i].tot_empty_reqs_per_trace - prev_c_stats[i].tot_empty_reqs_per_trace) / total_loops ;
-        }
-
-
-
-        memcpy(prev_c_stats, curr_c_stats, num_threads * (sizeof(struct thread_stats)));
-//        memcpy(prev_w_stats, curr_w_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
-        total_throughput = (all_clients_cache_hits) / seconds;
-        all_clients_throughput = all_clients_cache_hits / seconds;
-//        all_workers_throughput = (all_workers_remotes + all_workers_locals) / seconds;
-        printf("---------------PRINT %d time elapsed %.2f---------------\n", print_count, seconds / MILLION);
-        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f  \n",
-                     total_throughput, all_clients_throughput);
-        for (i = 0; i < num_threads; i++) {
-            double cacheHitRate;
-            double trace_ratio;
-            long long total_reqs = curr_c_stats[i].cache_hits_per_thread + curr_c_stats[i].remotes_per_client + curr_c_stats[i].locals_per_client;
-            if (total_reqs > 0)
-                trace_ratio =  curr_c_stats[i].cache_hits_per_thread / (double)total_reqs;
-            if (all_stats.remotes_per_client[i] > 0)
-                cacheHitRate = all_stats.cache_hits_per_client[i] / (all_stats.cache_hits_per_client[i] + all_stats.remotes_per_client[i] + all_stats.locals_per_client[i]);
-            yellow_printf("C%d: %.2f MIOPS-Batch %.2f(%.2f) -H %.2f -W %llu -E %.2f -AC %.2f  ", i, all_stats.cache_hits_per_client[i], all_stats.batch_size_per_client[i],
-                          all_stats.stalled_time_per_client[i], trace_ratio, curr_c_stats[i].wasted_loops, all_stats.empty_reqs_per_client[i],
-                          all_stats.average_coalescing_per_client[i]);
-            if  (i > 0 && i % 2 == 0) printf("\n");
-        }
-        printf("\n");
-        printf("---------------------------------------\n");
-        if(ENABLE_CACHE_STATS == 1)
-            print_cache_stats(start, machine_id);
-        // // Write to a file all_clients_throughput, per_worker_remote_throughput[], per_worker_local_throughput[]
-        if(DUMP_STATS_2_FILE == 1)
-            dump_stats_2_file(&all_stats);
-        green_printf("SYSTEM MIOPS: %.2f Cache MIOPS: %.2f \n",
-                     total_throughput, all_clients_throughput);
-
+    all_clients_cache_hits = 0;
+    print_count++;
+    if (EXIT_ON_PRINT == 1 && print_count == PRINT_NUM) {
+      if (MEASURE_LATENCY && machine_id == 0) print_latency_stats();
+      printf("---------------------------------------\n");
+      printf("------------RUN TERMINATED-------------\n");
+      printf("---------------------------------------\n");
+      exit(0);
     }
-}
+    seconds *= MILLION; // compute only MIOPS
+    for (i = 0; i < num_threads; i++) {
+      all_clients_cache_hits += curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread;
+      all_stats.cache_hits_per_thread[i] =
+        (curr_c_stats[i].cache_hits_per_thread - prev_c_stats[i].cache_hits_per_thread) / seconds;
 
-#define FIRST_N_HOT_IN_WINDOW 10
-void window_stats(struct extended_cache_op *op, struct mica_resp *resp) {
-    int i = 0, j = 0;
-    //struct cache_meta_stats meta;
-    //cache_meta_reset(&meta);
-    int window_hot_reads = 0;
-    int window_nor_reads = 0;
-    int window_nor_writes = 0;
-    int window_hot_writes = 0;
-    int hot_reads[FIRST_N_HOT_IN_WINDOW] = { 0 } ;
-    int hot_writes[FIRST_N_HOT_IN_WINDOW] = { 0 } ;
-    struct cache_key keys[FIRST_N_HOT_IN_WINDOW];
-    uint32_t tmp;
-    for(i = 0; i < FIRST_N_HOT_IN_WINDOW; i ++){
-        tmp = (uint32_t) i;
-        *(uint128 *) &keys[i] = CityHash128((char *) &(i), 4);
+      all_stats.stalled_gid[i] = (curr_c_stats[i].stalled_gid - prev_c_stats[i].stalled_gid) / seconds;
+      all_stats.stalled_ack_prep[i] = (curr_c_stats[i].stalled_ack_prep - prev_c_stats[i].stalled_ack_prep) / seconds;
+      all_stats.stalled_com_credit[i] =
+        (curr_c_stats[i].stalled_com_credit - prev_c_stats[i].stalled_com_credit) / seconds;
+
+      all_stats.preps_sent[i] = (curr_c_stats[i].preps_sent - prev_c_stats[i].preps_sent) / seconds;
+      all_stats.coms_sent[i] = (curr_c_stats[i].coms_sent - prev_c_stats[i].coms_sent) / seconds;
+      all_stats.acks_sent[i] = (curr_c_stats[i].acks_sent - prev_c_stats[i].acks_sent) / seconds;
+      all_stats.received_coms[i] = (curr_c_stats[i].received_coms - prev_c_stats[i].received_coms) / seconds;
+      all_stats.received_preps[i] = (curr_c_stats[i].received_preps - prev_c_stats[i].received_preps) / seconds;
+      all_stats.received_acks[i] = (curr_c_stats[i].received_acks - prev_c_stats[i].received_acks) / seconds;
     }
 
-    for(i = 0; i < CACHE_BATCH_SIZE; ++i) {
-        for (j = 0; j < FIRST_N_HOT_IN_WINDOW; j++)
-            if (keys_are_equal(&op[i].key, &keys[j]) == 1) {
-                if (op[i].opcode == CACHE_OP_PUT)
-                    hot_writes[j]++;
-                else
-                    hot_reads[j]++;
-            }
+      memcpy(prev_c_stats, curr_c_stats, num_threads * (sizeof(struct thread_stats)));
+      total_throughput = (all_clients_cache_hits) / seconds;
 
-        switch (resp[i].type) {
-            case CACHE_GET_SUCCESS:
-            case CACHE_GET_STALL:
-                window_hot_reads++;
-                break;
-            case CACHE_PUT_SUCCESS:
-            case CACHE_PUT_STALL:
-                window_hot_writes++;
-                break;
-            case CACHE_MISS:
-                if (op[i].opcode == CACHE_OP_GET)
-                    window_nor_reads++;
-                else if (op[i].opcode == CACHE_OP_PUT)
-                    window_nor_writes++;
-                else
-                    assert(0);
-                break;
-        }
-    }
+      printf("---------------PRINT %d time elapsed %.2f---------------\n", print_count, seconds / MILLION);
+      green_printf("SYSTEM MIOPS: %.2f \n", total_throughput);
+      for (i = 0; i < num_threads; i++) {
+        yellow_printf("T%d: %.2f MIOPS, STALL: GID: %.2f/s, ACK/PREP %.2f/s, COM/CREDIT %.2f/s ", i,
+                      all_stats.cache_hits_per_thread[i],
+                      all_stats.stalled_gid[i],
+                      all_stats.stalled_ack_prep[i],
+                      all_stats.stalled_com_credit[i]);
+        if (i > 0 && i % 2 == 0) printf("\n");
+      }
+      printf("\n");
+      printf("---------------------------------------\n");
+      if (ENABLE_CACHE_STATS == 1)
+        print_cache_stats(start, machine_id);
+      // // Write to a file all_clients_throughput, per_worker_remote_throughput[], per_worker_local_throughput[]
+      if (DUMP_STATS_2_FILE == 1)
+        dump_stats_2_file(&all_stats);
+      green_printf("SYSTEM MIOPS: %.2f \n", total_throughput);
+  }
 
-    printf("Hot Reads in window: %d \n",window_hot_reads);
-    for(i = 0; i < FIRST_N_HOT_IN_WINDOW; i++)
-        printf("%d : %d,\t",i,hot_reads[i]);
-    printf("\n");
-    printf("Hot Writes in window: %d \n", window_hot_writes);
-    for(i = 0; i < FIRST_N_HOT_IN_WINDOW; i++)
-        printf("%d : %d,\t",i,hot_writes[i]);
-    printf("\n");
-    printf("Normal Reads %d Writes %d \n", window_nor_reads, window_nor_writes);
-    /*switch(resp[i].type) {
-        case CACHE_GET_SUCCESS:
-            meta.num_get_success++;
-            break;
-        case CACHE_PUT_SUCCESS:
-            meta.num_put_success++;
-            break;
-        case CACHE_UPD_SUCCESS:
-            meta.num_upd_success++;
-            break;
-        case CACHE_INV_SUCCESS:
-            meta.num_inv_success++;
-            break;
-        case CACHE_ACK_SUCCESS:
-        case CACHE_LAST_ACK_SUCCESS:
-            meta.num_ack_success++;
-            break;
-        case CACHE_MISS:
-            if((*op)[i].opcode == CACHE_OP_GET)
-                meta.num_get_miss++;
-            else if((*op)[i].opcode == CACHE_OP_PUT)
-                meta.num_put_miss++;
-            else assert(0);
-            break;
-        case CACHE_GET_STALL:
-            meta.num_get_stall++;
-            break;
-        case CACHE_PUT_STALL:
-            meta.num_put_stall++;
-            break;
-        case CACHE_UPD_FAIL:
-            meta.num_upd_fail++;
-            break;
-        case CACHE_INV_FAIL:
-            meta.num_inv_fail++;
-            break;
-        case CACHE_ACK_FAIL:
-            meta.num_ack_fail++;
-            break;
-        case UNSERVED_CACHE_MISS:
-            if((*op)[i].opcode == CACHE_OP_GET)
-                meta.num_unserved_get_miss++;
-            else if((*op)[i].opcode == CACHE_OP_PUT)
-                meta.num_unserved_put_miss++;
-            else assert(0);
-            break;
-        default: assert(0);
-    }*/
-    //}
-    //meta.num_put_success -= stalled_brcs;
 }
 
 //assuming microsecond latency

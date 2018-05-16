@@ -26,7 +26,7 @@
 #include "hrd_sizes.h"
 
 
-//<vasilis> Multicast
+// Multicast
 #include <rdma/rdma_cma.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -34,12 +34,12 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <stdbool.h>
-// <vasilis>
+
 
 #define HRD_Q_DEPTH 0	/* Used only by wrappers we do not care about */
 
 #define USE_BIG_OBJECTS 0
-#define EXTRA_CACHE_LINES 1
+#define EXTRA_CACHE_LINES 2
 #define BASE_VALUE_SIZE 32
 #define SHIFT_BITS (USE_BIG_OBJECTS == 1 ? 3 : 0) // number of bits to shift left or right to calculate the value length
 #define HRD_DEFAULT_PSN 3185	/* PSN for all queues */ // starting Packet Sequence Number
@@ -50,47 +50,13 @@
 #define HRD_RESERVED_NAME_PREFIX "__HRD_RESERVED_NAME_PREFIX"
 
 #define HRD_CONNECT_IB_ATOMICS 0
-
-#define HERD_NUM_BKTS (USE_BIG_OBJECTS == 1 ? (128 * 1024) : (2 * 1024 * 1024))
 #define HERD_LOG_CAP  (1024 * 1024 * 1024)
-
-
-#define HERD_NUM_KEYS (USE_BIG_OBJECTS == 1 ? (512 * 1024) : (4 * 1024 * 1024))//(8 * 1024 * 1024)
-
-
 #define HERD_VALUE_SIZE (USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + BASE_VALUE_SIZE) : BASE_VALUE_SIZE) //(169 + 64)// 46 + 64 + 64//32 //(46 + 64)
 #define VALUE_SIZE (HERD_VALUE_SIZE)
 /* Request sizes */
 #define KEY_SIZE 16
 #define TRUE_KEY_SIZE 8 // the key that is actually used by MICA
-#define HERD_GET_REQ_SIZE ((KEY_SIZE + 1 )) /* 16 byte key + opcode */
-#define HERD_PUT_REQ_SIZE (KEY_SIZE + 1 + 1 + HERD_VALUE_SIZE) /* Key, op, len, val */
-
 #define GRH_SIZE 40 // GLobal Routing Header
-#define MICA_OP_SIZE (USE_BIG_OBJECTS == 1 ? (64 + (EXTRA_CACHE_LINES * 64)) : 64)
-//#define CACHE_OP_SIZE //MICA_OP_SIZE
-#define UD_REQ_SIZE (MICA_OP_SIZE + GRH_SIZE) // Buffer slot size required for a UD request
-
-
-
-#define ENABLE_COALESCING 0
-#define ENABLE_WORKER_COALESCING_ (USE_BIG_OBJECTS == 0 ? 1 : 0)
-#define ENABLE_WORKER_COALESCING (ENABLE_COALESCING == 1 ? ENABLE_WORKER_COALESCING_ : 0)
-
-
-#define DESIRED_COALESCING_FACTOR 32
-
-
-#define WRKR_COALESCING_BUF_SLOT_SIZE_ (DESIRED_COALESCING_FACTOR * HERD_VALUE_SIZE)
-#define WRKR_COALESCING_BUF_SLOT_SIZE (ENABLE_WORKER_COALESCING == 1 ? WRKR_COALESCING_BUF_SLOT_SIZE_ : HERD_VALUE_SIZE)
-
-#define MINIMUM_WORKER_REQ_SIZE ((DESIRED_COALESCING_FACTOR * HERD_GET_REQ_SIZE) + 1) + GRH_SIZE
-#define EXTRA_WORKER_REQ_BYTES_ (MINIMUM_WORKER_REQ_SIZE <= UD_REQ_SIZE ? 0 : MINIMUM_WORKER_REQ_SIZE - UD_REQ_SIZE)
-#define EXTRA_WORKER_REQ_BYTES (ENABLE_COALESCING == 1 ? EXTRA_WORKER_REQ_BYTES_ : 0)
-
-
-//#define CACHE_OP_SIZE WORKER_NET_REQ_SIZE//MICA_OP_SIZE
-
 
 #define HUGE_PAGE_SIZE 2097152
 #define LEVERAGE_TLB_COALESCING 1
@@ -101,12 +67,10 @@
  */
 #define HRD_MAX_INLINE  188//(USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + 60) : 60) //60 is what kalia had here//
 // This is required for ROCE not sure yet why
-// <vasilis>
+
 #define IB_PHYS_PORT 1
-// </vasilis>
-// <akatsarakis>
 #define USE_HUGE_PAGES 1
-// </akatsarakis>
+
 /* Useful when `x = (x + 1) % N` is done in a loop */
 #define MOD_ADD(x, N) do { \
 	x = x + 1; \
@@ -121,9 +85,6 @@
 		x = B; \
 	} \
 } while(0)
-
-
-
 
 
 
@@ -146,7 +107,7 @@
 	if(unlikely(val)) { fprintf(stderr, msg); fprintf(stderr, " Error %d \n", err_code); \
 	exit(err_code);}
 
-/* vasilis added a ceiling and a MAX*/
+
 #define CEILING(x,y) (((x) + (y) - 1) / (y))
 #define MAX(x,y) (x > y ? x : y)
 #define MIN(x,y) (x < y ? x : y)
@@ -158,7 +119,7 @@
 /* Is pointer x aligned to A-byte alignment? */
 #define is_aligned(x, A) (((uint64_t) x) % A == 0)
 
-// <vasilis>
+
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
