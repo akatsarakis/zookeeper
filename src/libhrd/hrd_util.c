@@ -4,7 +4,7 @@
 /* Every thread creates a TCP connection to the registry only once. */
 __thread memcached_st *memc = NULL;
 
-//<vasilis>
+
 // returns the number of remote IP addresses and fills the remote_IPs array with them
 int getRemoteIPs(char*** remote_IPs)
 {
@@ -31,7 +31,7 @@ void die(const char *reason)
   exit(1);
 }
 
-// </vasilis>
+
 
 /* Print information about all IB devices in the system */
 void
@@ -234,7 +234,7 @@ void* hrd_malloc_socket(int shm_key, int size, int socket_id)
 		exit(-1);
 	}
 
-	// vasilis- try to take advantage of TLB coalescing, if it is there
+	// try to take advantage of TLB coalescing, if it is there
 	if (LEVERAGE_TLB_COALESCING) {
 		int page_no = CEILING(size, HUGE_PAGE_SIZE);
 		int i;

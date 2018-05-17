@@ -67,10 +67,10 @@ hrd_ctrl_blk_init(int local_hid, int port_index,
 	cb->dgram_buf_size = dgram_buf_size;
 	cb->dgram_buf_shm_key = dgram_buf_shm_key;
 
-// <vasilis>
+//
 	cb->recv_q_depth = recv_q_depth;
 	cb->send_q_depth = send_q_depth;
-// </vasilis>
+//
 	/* Get the device to use. This fills in cb->device_id and cb->dev_port_id */
 	struct ibv_device *ib_dev = hrd_resolve_port_index(cb, port_index);
 	CPE(!ib_dev, "HRD: IB device not found", 0);
@@ -174,13 +174,6 @@ hrd_ctrl_blk_init(int local_hid, int port_index,
 		}
 	}
 
-  // <vasilis> I am mallocing bigger depth for the work completions
-	/* Create an array in cb for holding work completions */
-	// cb->wc = (struct ibv_wc *) malloc(HRD_Q_DEPTH * sizeof(struct ibv_wc));
-	// // cb->wc = (struct ibv_wc *) malloc(recv_q_depth[0] * sizeof(struct ibv_wc));
-	// assert(cb->wc != NULL);
-	// memset(cb->wc, 0, HRD_Q_DEPTH * sizeof(struct ibv_wc));
-	// </vasilis>
 
 	return cb;
 }
@@ -293,13 +286,10 @@ void hrd_create_dgram_qps(struct hrd_ctrl_blk *cb)
 			cb->send_q_depth[i], NULL, NULL, 0);
 		assert(cb->dgram_send_cq[i] != NULL);
 
-    // <vasilis> I am replacing the recv_cq Depth
-		// cb->dgram_recv_cq[i] = ibv_create_cq(cb->ctx,
-		// 	HRD_Q_DEPTH, NULL, NULL, 0);
 		cb->dgram_recv_cq[i] = ibv_create_cq(cb->ctx,
 			cb->recv_q_depth[i], NULL, NULL, 0);
 		assert(cb->dgram_recv_cq[i] != NULL);
-		// </vasilis>
+
 
 		/* Initialize creation attributes */
 		struct ibv_qp_init_attr create_attr;
@@ -311,10 +301,10 @@ void hrd_create_dgram_qps(struct hrd_ctrl_blk *cb)
 		create_attr.qp_type = IBV_QPT_UD;
 
 		create_attr.cap.max_send_wr = cb->send_q_depth[i];
-		// <vasilis>
+
 		//printf("Receive q depth %d\n", cb->recv_q_depth);
 		create_attr.cap.max_recv_wr = cb->recv_q_depth[i];
-		// </vasilis>
+
 		create_attr.cap.max_send_sge = 1;
 		create_attr.cap.max_recv_sge = 1;
 		create_attr.cap.max_inline_data = HRD_MAX_INLINE;
@@ -465,7 +455,7 @@ void hrd_connect_qp(struct hrd_ctrl_blk *cb,
 	conn_attr.dest_qp_num = remote_qp_attr->qpn;
 	conn_attr.rq_psn = HRD_DEFAULT_PSN;
 
-	// // <vasilis>  ---ROCE----------
+	// ---ROCE----------
 	if (is_roce == 1) {
 		conn_attr.ah_attr.is_global = 1;
 	  conn_attr.ah_attr.dlid = 0;
@@ -478,7 +468,7 @@ void hrd_connect_qp(struct hrd_ctrl_blk *cb,
 		conn_attr.ah_attr.is_global = 0;
 		conn_attr.ah_attr.dlid = remote_qp_attr->lid;
 	}
-  // </vasilis>
+
 
 	conn_attr.ah_attr.sl = 0;
 	conn_attr.ah_attr.src_path_bits = 0;
@@ -595,7 +585,7 @@ void hrd_publish_conn_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name)
 	memcpy(qp_attr.name, qp_name, len);
 	qp_attr.name[len] = 0;	/* Add the null terminator */
 
-  // <vasilis>  ---ROCE----------
+  //   ---ROCE----------
 	if (is_roce == 1) {
 		union ibv_gid ret_gid;
 		ibv_query_gid(cb->ctx, IB_PHYS_PORT, 0, &ret_gid);
@@ -603,7 +593,7 @@ void hrd_publish_conn_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name)
 		qp_attr.gid_global_subnet_prefix = ret_gid.global.subnet_prefix;
 	}
 	//printf("Publishing conn qp with name %s \n", qp_attr.name);
-  // </vasilis>
+  //
 
 	qp_attr.buf_addr = (uint64_t) (uintptr_t) cb->conn_buf;
 	qp_attr.buf_size = cb->conn_buf_size;
@@ -638,7 +628,7 @@ void hrd_publish_dgram_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name, u
 	qp_attr.qpn = cb->dgram_qp[n]->qp_num;
 	qp_attr.sl = sl;
 
-	// <Vasilis>  ---ROCE----------
+	//   ---ROCE----------
 	if (is_roce == 1) {
 		union ibv_gid ret_gid;
 		ibv_query_gid(cb->ctx, IB_PHYS_PORT, 0, &ret_gid);
@@ -646,7 +636,7 @@ void hrd_publish_dgram_qp(struct hrd_ctrl_blk *cb, int n, const char *qp_name, u
 		qp_attr.gid_global_subnet_prefix = ret_gid.global.subnet_prefix;
 	}
 	//printf("Publishing datagram qp with name %s \n", qp_attr.name);
-	// </vasilis>
+	//
 
 	hrd_publish(qp_attr.name, &qp_attr, sizeof(struct hrd_qp_attr));
 }
