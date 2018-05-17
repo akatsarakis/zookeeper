@@ -23,23 +23,18 @@ extern uint64_t seed;
 ------------------------------STATS --------------------------------------
 ---------------------------------------------------------------------------*/
 struct stats {
-
-	double remotes_per_worker[THREADS_PER_MACHINE];
-	double locals_per_worker[THREADS_PER_MACHINE];
-	double batch_size_per_worker[THREADS_PER_MACHINE];
-	double aver_reqs_polled_per_worker[THREADS_PER_MACHINE];
-
-
-	double batch_size_per_client[THREADS_PER_MACHINE];
+  double batch_size_per_thread[THREADS_PER_MACHINE];
+  double com_batch_size[THREADS_PER_MACHINE];
+  double prep_batch_size[THREADS_PER_MACHINE];
+  double ack_batch_size[THREADS_PER_MACHINE];
+  double write_batch_size[THREADS_PER_MACHINE];
 	double stalled_gid[THREADS_PER_MACHINE];
   double stalled_ack_prep[THREADS_PER_MACHINE];
   double stalled_com_credit[THREADS_PER_MACHINE];
 
-	double empty_reqs_per_client[THREADS_PER_MACHINE];
+
 	double cache_hits_per_thread[THREADS_PER_MACHINE];
-	double remotes_per_client[THREADS_PER_MACHINE];
-	double locals_per_client[THREADS_PER_MACHINE];
-	double average_coalescing_per_client[THREADS_PER_MACHINE];
+
 
 	double preps_sent[THREADS_PER_MACHINE];
 	double acks_sent[THREADS_PER_MACHINE];

@@ -435,7 +435,12 @@ static inline void get_wids(struct pending_writes *p_writes, uint16_t t_id)
 {
 	uint16_t unordered_writes_num = (LEADER_PENDING_WRITES + p_writes->push_ptr - p_writes->unordered_ptr)
 																	% LEADER_PENDING_WRITES;
+  if (unordered_writes_num == 0) return;
 	uint64_t id = atomic_fetch_add_explicit(&global_w_id, (uint64_t)unordered_writes_num, memory_order_relaxed);
+  if (ENABLE_STAT_COUNTING) {
+    t_stats[t_id].batches_per_thread++;
+    t_stats[t_id].total_writes += unordered_writes_num;
+  }
 	int i;
 	for (i = 0; i < unordered_writes_num; ++i) {
     uint16_t unordered_ptr =  (LEADER_PENDING_WRITES + p_writes->push_ptr - unordered_writes_num + i)

@@ -18,7 +18,7 @@
 #define WORKER_HYPERTHREADING 1
 #define MAX_SERVER_PORTS 1 // better not change that
 
-#define THREADS_PER_MACHINE 4
+#define THREADS_PER_MACHINE 6
 #define FOLLOWERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define LEADERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define MACHINE_NUM 3
@@ -31,7 +31,7 @@
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 80
+#define SESSIONS_PER_THREAD 130
 
 
 #define ENABLE_WORKERS_CRCW 1
@@ -93,7 +93,7 @@
 #define LEADER 2
 
 #define MIN_SS_BATCH 127// The minimum SS batch
-#define ENABLE_ASSERTIONS 1
+#define ENABLE_ASSERTIONS 0
 #define ENABLE_STAT_COUNTING 1
 #define MAXIMUM_INLINE_SIZE 188
 #define DISABLE_GID_ORDERING 0
@@ -143,7 +143,7 @@
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
 
 //---WRITES---
-#define MAX_W_COALESCE 4
+#define MAX_W_COALESCE 6
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
 #define W_SIZE (VALUE_SIZE + WRITE_HEADER)
 #define FLR_W_SEND_SIZE (MAX_W_COALESCE * W_SIZE)
@@ -151,7 +151,7 @@
 #define FLR_W_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 15
+#define MAX_PREP_COALESCE 12
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
@@ -200,7 +200,7 @@
 
 
 //--FOLLOWER
-#define FLR_PREP_BUF_SLOTS (6 * PREPARE_CREDITS)
+#define FLR_PREP_BUF_SLOTS (3 * PREPARE_CREDITS)
 #define FLR_PREP_BUF_SIZE (FLR_PREP_RECV_SIZE * FLR_PREP_BUF_SLOTS)
 #define FLR_COM_BUF_SLOTS (COMMIT_CREDITS)
 #define FLR_COM_BUF_SIZE (FLR_COM_RECV_SIZE * FLR_COM_BUF_SLOTS)
@@ -497,17 +497,16 @@ struct thread_stats { // 2 cache lines
   long long received_preps_mes_num;
   long long received_writes_mes_num;
 
-	long long remote_messages_per_client;
 
-	long long batches_per_client;
+	uint64_t batches_per_thread; // Leader only
+  uint64_t total_writes; // Leader only
 
 	uint64_t stalled_gid;
   uint64_t stalled_ack_prep;
   uint64_t stalled_com_credit;
 
 
-	long long wasted_loops;
-	double tot_empty_reqs_per_trace;
+
 
 
 	//long long unused[3]; // padding to avoid false sharing

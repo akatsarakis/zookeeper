@@ -51,6 +51,25 @@ void *print_stats(void* no_arg) {
       all_stats.received_coms[i] = (curr_c_stats[i].received_coms - prev_c_stats[i].received_coms) / seconds;
       all_stats.received_preps[i] = (curr_c_stats[i].received_preps - prev_c_stats[i].received_preps) / seconds;
       all_stats.received_acks[i] = (curr_c_stats[i].received_acks - prev_c_stats[i].received_acks) / seconds;
+      if (machine_id == LEADER_MACHINE) {
+        all_stats.batch_size_per_thread[i] = (curr_c_stats[i].total_writes - prev_c_stats[i].total_writes) /
+                                             (double) (curr_c_stats[i].batches_per_thread -
+                                                       prev_c_stats[i].batches_per_thread);
+        all_stats.com_batch_size[i] = (curr_c_stats[i].coms_sent - prev_c_stats[i].coms_sent) /
+                                     (double) (curr_c_stats[i].coms_sent_mes_num -
+                                               prev_c_stats[i].coms_sent_mes_num);
+        all_stats.prep_batch_size[i] = (curr_c_stats[i].preps_sent - prev_c_stats[i].preps_sent) /
+                                      (double) (curr_c_stats[i].preps_sent_mes_num -
+                                                prev_c_stats[i].preps_sent_mes_num);
+      }
+      else {
+        all_stats.ack_batch_size[i] = (curr_c_stats[i].acks_sent - prev_c_stats[i].acks_sent) /
+                                      (double) (curr_c_stats[i].acks_sent_mes_num -
+                                                prev_c_stats[i].acks_sent_mes_num);
+        all_stats.write_batch_size[i] = (curr_c_stats[i].writes_sent - prev_c_stats[i].writes_sent) /
+                                      (double) (curr_c_stats[i].writes_sent_mes_num -
+                                                prev_c_stats[i].writes_sent_mes_num);
+      }
     }
 
       memcpy(prev_c_stats, curr_c_stats, num_threads * (sizeof(struct thread_stats)));
@@ -59,12 +78,25 @@ void *print_stats(void* no_arg) {
       printf("---------------PRINT %d time elapsed %.2f---------------\n", print_count, seconds / MILLION);
       green_printf("SYSTEM MIOPS: %.2f \n", total_throughput);
       for (i = 0; i < num_threads; i++) {
-        yellow_printf("T%d: %.2f MIOPS, STALL: GID: %.2f/s, ACK/PREP %.2f/s, COM/CREDIT %.2f/s ", i,
+        cyan_printf("T%d: ", i);
+        yellow_printf("%.2f MIOPS, STALL: GID: %.2f/s, ACK/PREP %.2f/s, COM/CREDIT %.2f/s", i,
                       all_stats.cache_hits_per_thread[i],
                       all_stats.stalled_gid[i],
                       all_stats.stalled_ack_prep[i],
                       all_stats.stalled_com_credit[i]);
-        if (i > 0 && i % 2 == 0) printf("\n");
+        if (machine_id == LEADER_MACHINE) {
+          yellow_printf(", BATCHES: GID %.2f, Coms %.2f, Preps %.2f ",
+                        all_stats.batch_size_per_thread[i],
+                        all_stats.com_batch_size[i],
+                        all_stats.prep_batch_size[i]);
+        }
+        else {
+          yellow_printf(", BATCHES: Acks %.2f, Ws %.2f ",
+                        all_stats.ack_batch_size[i],
+                        all_stats.write_batch_size[i]);
+        }
+        //if (i > 0 && i % 2 == 0)
+          printf("\n");
       }
       printf("\n");
       printf("---------------------------------------\n");
