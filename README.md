@@ -1,18 +1,15 @@
-# ccKVS
-A skew-aware key-value store build on top of RDMA, based on MICA key-value store and adapting HERD libraries, utilizing the techniques of symmetric caching to offer increase performance over load balancing.
+# Zookeeper
+Zookeeper offers Sequential Consistency through a leader-based protocol. This project implements the Zookeeper Conssistency protocol over RDMA in orer to evaluate and comare its performance
 
-## Symmetric Caching
-Every node contains an identical popularity-based cache of keys stored in the system
-* **Incremental Locking**: (Core Sharding + Caching) serves:
- * cold keys via a _single core_ (EREW), avoiding the cost of synchronization,
- * hot keys using  _multiple cores_ (CRCW) exploiting optimistic concurency control (lock-free reads) & _several machines_ (replication via caching)
-* **Unified Protocols for Replication and Atomicity**:
- * distributed coherence protocols implemented on top of RDMA (offering per key Strong and Sequencial Consistency)
+## Optimizations
+The protocol is implemented over UD Sends and Receives
+Leader broadcasts using the RDMA Multicast (but there is a knob to rever to unicasts too)
+All messages are batched, the stats will print out the batching size of all messages
+
 
 ## Repository Contains
-1. A modified version of HERD/MICA where each server acts both as client and a server over UD and UC transports.
-2. Similar to 1. but using UD transports only
-3. Armonia KVS built on top of 2. and using the technique of symetric caching to exploit skew for high performance.
+1. A modified version of MICA that serves as the store for the Zookeeper
+2. A layer that implements the protocol that runs over 1
 
 ## Requirments
 
