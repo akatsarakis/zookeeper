@@ -1,10 +1,10 @@
 # Zookeeper
-Zookeeper offers Sequential Consistency through a leader-based protocol. This project implements the Zookeeper Conssistency protocol over RDMA in orer to evaluate and comare its performance
+Zookeeper offers Sequential Consistency through a leader-based protocol. This project implements the Zookeeper Conssistency protocol over RDMA in order to evaluate and compare its performance.
 
 ## Optimizations
-The protocol is implemented over UD Sends and Receives
-Leader broadcasts using the RDMA Multicast (but there is a knob to rever to unicasts too)
-All messages are batched, the stats will print out the batching size of all messages
+The protocol is implemented over UD Sends and Receives.
+Leader broadcasts using the RDMA Multicast (but there is a knob to rever to unicasts too).
+All messages are batched, the stats will print out the batching size of all messages.
 
 
 ## Repository Contains
