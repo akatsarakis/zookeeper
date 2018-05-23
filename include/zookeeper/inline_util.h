@@ -642,7 +642,8 @@ static inline void propagate_updates(struct pending_writes *p_writes, struct com
 		p_writes->local_w_id += update_op_i; // advance the local_w_id
     if (ENABLE_ASSERTIONS) assert(p_writes->size >= update_op_i);
     p_writes->size -= update_op_i;
-		cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, LEADER_PENDING_WRITES, false);
+    if (!DISABLE_UPDATING_KVS)
+      cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, LEADER_PENDING_WRITES, false);
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
 //    if (t_id == 0)  yellow_printf("Committed global id %lu \n", committed_g_id);
 	}
@@ -1486,7 +1487,11 @@ static inline void flr_propagate_updates(struct pending_writes *p_writes, struct
 		}
 		p_acks->slots_ahead -= update_op_i;
 		p_writes->size -= update_op_i;
-		cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, FLR_PENDING_WRITES, true);
+		if (!DISABLE_UPDATING_KVS)
+      cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, FLR_PENDING_WRITES, true);
+    else
+      for (uint16_t i = 0; i < update_op_i; i++) p_writes->ptrs_to_ops[(pull_ptr + i) % FLR_PENDING_WRITES]->opcode = 5;
+
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
 //		yellow_printf("Committed global id %lu \n", committed_g_id);
 	}

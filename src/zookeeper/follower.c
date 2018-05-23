@@ -26,7 +26,7 @@ void *follower(void *arg)
 
   uint32_t prep_push_ptr = 0, prep_pull_ptr = 0;
   uint32_t com_push_ptr = 0, com_pull_ptr = 0;
-  volatile struct prep_message_ud_req *prep_buffer = (struct prep_message_ud_req *)(cb->dgram_buf);
+  volatile struct prep_message_ud_req *prep_buffer = (volatile struct prep_message_ud_req *)(cb->dgram_buf);
   struct com_message_ud_req *com_buffer = (struct com_message_ud_req *)(cb->dgram_buf + FLR_PREP_BUF_SIZE);
 
   /* ---------------------------------------------------------------------------

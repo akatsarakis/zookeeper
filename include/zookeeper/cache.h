@@ -12,11 +12,11 @@
 #include "main.h"
 #include "mica.h"
 #define CACHE_DEBUG 0
-#define CACHE_NUM_BKTS (128 * 1024) //64K buckets seems to be enough to store most of 250K keys
-#define CACHE_NUM_KEYS (25 * 1000)
+#define CACHE_NUM_BKTS (1024 * 1024) //64K buckets seems to be enough to store most of 250K keys
+#define CACHE_NUM_KEYS (250 * 1000)
 
-#define WRITE_RATIO 50  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
-#define CACHE_BATCH_SIZE 800
+#define WRITE_RATIO 1000  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define CACHE_BATCH_SIZE 1000
 
 //Cache States
 #define VALID_STATE 1

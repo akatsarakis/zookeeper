@@ -255,7 +255,7 @@ void manufacture_trace(struct trace_command **cmds, int g_id)
     if ((*cmds)[i].opcode == 1) writes++;
   }
 
-  if (g_id  == 0) printf("Write Ratio: %.2f%% \n, Trace size %d \n", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
+  if (g_id  == 0) printf("Write Ratio: %.2f%% \nTrace size %d \n", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
   (*cmds)[TRACE_SIZE].opcode = NOP;
   // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
   //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
@@ -354,12 +354,19 @@ int pin_thread(int t_id) {
     int core;
     core = PHYSICAL_CORE_DISTANCE * t_id;
     if(core > TOTAL_CORES_) { //if you run out of cores in numa node 0
-        if (WORKER_HYPERTHREADING) { //use hyperthreading rather than go to the other socket
+        if (ENABLE_HYPERTHREADING) { //use hyperthreading rather than go to the other socket
             core = PHYSICAL_CORE_DISTANCE * (t_id - PHYSICAL_CORES_PER_SOCKET) + 2;
+          if (core > TOTAL_CORES_) { // now go to the other socket
+            core = PHYSICAL_CORE_DISTANCE * (t_id - 20) + 1 ;
+            if (core > TOTAL_CORES_) { // again do hyperthreading on the second socket
+              core = PHYSICAL_CORE_DISTANCE * (t_id - 30) + 3;
+            }
+          }
         }
         else { //spawn clients to numa node 1
             core = (t_id - PHYSICAL_CORES_PER_SOCKET) * PHYSICAL_CORE_DISTANCE + 1;
         }
+
     }
     assert(core >= 0 && core < TOTAL_CORES);
     return core;
@@ -368,7 +375,7 @@ int pin_thread(int t_id) {
 // pin a thread avoid collisions with pin_thread()
 int pin_threads_avoiding_collisions(int c_id) {
     int c_core;
-    if (!WORKER_HYPERTHREADING || FOLLOWERS_PER_MACHINE < PHYSICAL_CORES_PER_SOCKET) {
+    if (!ENABLE_HYPERTHREADING || FOLLOWERS_PER_MACHINE < PHYSICAL_CORES_PER_SOCKET) {
         if (c_id < FOLLOWERS_PER_MACHINE) c_core = PHYSICAL_CORE_DISTANCE * c_id + 2;
         else c_core = (FOLLOWERS_PER_MACHINE * 2) + (c_id * 2);
 

@@ -15,10 +15,10 @@
 #define PHYSICAL_CORES_PER_SOCKET 10
 #define PHYSICAL_CORE_DISTANCE 4 // distance between two physical cores of the same socket
 #define VIRTUAL_CORES_PER_SOCKET 20
-#define WORKER_HYPERTHREADING 1
+#define ENABLE_HYPERTHREADING 1
 #define MAX_SERVER_PORTS 1 // better not change that
 
-#define THREADS_PER_MACHINE 6
+#define THREADS_PER_MACHINE 5
 #define FOLLOWERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define LEADERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define MACHINE_NUM 3
@@ -31,10 +31,11 @@
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 130
+#define SESSIONS_PER_THREAD 60
 
+#define DISABLE_GID_ORDERING 0
+#define DISABLE_UPDATING_KVS 0
 
-#define ENABLE_WORKERS_CRCW 1
 #define ENABLE_CACHE_STATS 0
 #define EXIT_ON_PRINT 0
 #define PRINT_NUM 4
@@ -63,6 +64,7 @@
 #define DISABLE_CACHE 0 // Run Baseline
 #define LOAD_BALANCE 1 // Use a uniform access pattern
 #define FOLLOWER_DOES_ONLY_READS 0
+
 
 /*-------------------------------------------------
 	-----------------MULTICAST-------------------------
@@ -96,7 +98,7 @@
 #define ENABLE_ASSERTIONS 0
 #define ENABLE_STAT_COUNTING 1
 #define MAXIMUM_INLINE_SIZE 188
-#define DISABLE_GID_ORDERING 0
+
 
 //--------FOLOWER Flow Control
 #define W_CREDITS 15
@@ -151,7 +153,7 @@
 #define FLR_W_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 12
+#define MAX_PREP_COALESCE 18
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))

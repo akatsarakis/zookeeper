@@ -13,31 +13,13 @@
   <component name="ChangeListManager">
     <list default="true" id="3de85e4e-0ec2-4ef2-a602-0b395531c457" name="Default" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" afterPath="$PROJECT_DIR$/CMakeLists.txt" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/Makefile2" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/Makefile2" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/progress.marks" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/progress.marks" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/DependInfo.cmake" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/DependInfo.cmake" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/build.make" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/build.make" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/cmake_clean.cmake" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/cmake_clean.cmake" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/link.txt" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/link.txt" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/progress.make" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/zookeeper.dir/progress.make" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/Makefile" afterPath="$PROJECT_DIR$/cmake-build-debug/Makefile" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/zookeeper.cbp" afterPath="$PROJECT_DIR$/cmake-build-debug/zookeeper.cbp" />
-      <change beforePath="$PROJECT_DIR$/include/libhrd/hrd.h" afterPath="$PROJECT_DIR$/include/libhrd/hrd.h" />
-      <change beforePath="$PROJECT_DIR$/include/mica/mica.h" afterPath="$PROJECT_DIR$/include/mica/mica.h" />
+      <change beforePath="$PROJECT_DIR$/README.md" afterPath="$PROJECT_DIR$/README.md" />
       <change beforePath="$PROJECT_DIR$/include/zookeeper/cache.h" afterPath="$PROJECT_DIR$/include/zookeeper/cache.h" />
       <change beforePath="$PROJECT_DIR$/include/zookeeper/inline_util.h" afterPath="$PROJECT_DIR$/include/zookeeper/inline_util.h" />
       <change beforePath="$PROJECT_DIR$/include/zookeeper/main.h" afterPath="$PROJECT_DIR$/include/zookeeper/main.h" />
-      <change beforePath="$PROJECT_DIR$/include/zookeeper/util.h" afterPath="$PROJECT_DIR$/include/zookeeper/util.h" />
-      <change beforePath="$PROJECT_DIR$/src/libhrd/hrd_conn.c" afterPath="$PROJECT_DIR$/src/libhrd/hrd_conn.c" />
-      <change beforePath="$PROJECT_DIR$/src/libhrd/hrd_util.c" afterPath="$PROJECT_DIR$/src/libhrd/hrd_util.c" />
-      <change beforePath="$PROJECT_DIR$/src/zookeeper/cache.c" afterPath="$PROJECT_DIR$/src/zookeeper/cache.c" />
       <change beforePath="$PROJECT_DIR$/src/zookeeper/follower.c" afterPath="$PROJECT_DIR$/src/zookeeper/follower.c" />
       <change beforePath="$PROJECT_DIR$/src/zookeeper/leader.c" afterPath="$PROJECT_DIR$/src/zookeeper/leader.c" />
-      <change beforePath="$PROJECT_DIR$/src/zookeeper/main.c" afterPath="$PROJECT_DIR$/src/zookeeper/main.c" />
-      <change beforePath="$PROJECT_DIR$/src/zookeeper/stats.c" afterPath="$PROJECT_DIR$/src/zookeeper/stats.c" />
       <change beforePath="$PROJECT_DIR$/src/zookeeper/util.c" afterPath="$PROJECT_DIR$/src/zookeeper/util.c" />
-      <change beforePath="$PROJECT_DIR$/src/zookeeper/worker.c" afterPath="" />
       <change beforePath="$PROJECT_DIR$/src/zookeeper/zookeeper" afterPath="$PROJECT_DIR$/src/zookeeper/zookeeper" />
     </list>
     <ignored path="$PROJECT_DIR$/cmake-build-debug/" />
@@ -50,7 +32,7 @@
   </component>
   <component name="ExecutionTargetManager" SELECTED_TARGET="CMakeBuildProfile:Debug" />
   <component name="FileEditorManager">
-    <splitter split-orientation="horizontal" split-proportion="0.61145836">
+    <splitter split-orientation="horizontal" split-proportion="0.5196978">
       <split-first>
         <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
           <file leaf-file-name="main.c" pinned="false" current-in-tab="false">
@@ -65,22 +47,17 @@
               </provider>
             </entry>
           </file>
-          <file leaf-file-name="util.c" pinned="false" current-in-tab="false">
+          <file leaf-file-name="util.c" pinned="false" current-in-tab="true">
             <entry file="file://$PROJECT_DIR$/src/zookeeper/util.c">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="146">
-                  <caret line="296" column="5" lean-forward="false" selection-start-line="296" selection-start-column="5" selection-end-line="296" selection-end-column="5" />
+                <state relative-caret-position="452">
+                  <caret line="362" column="13" lean-forward="false" selection-start-line="362" selection-start-column="13" selection-end-line="362" selection-end-column="13" />
                   <folding>
-                    <element signature="e#11646#12993#0" expanded="true" />
-                    <element signature="e#17018#17401#0" expanded="true" />
-                    <element signature="e#20799#22360#0" expanded="true" />
-                    <element signature="e#22883#23807#0" expanded="true" />
-                    <element signature="e#23809#24377#0" expanded="true" />
-                    <element signature="e#27698#28551#0" expanded="true" />
-                    <element signature="e#28789#31219#0" expanded="true" />
-                    <element signature="e#35917#37020#0" expanded="true" />
-                    <element signature="e#37022#39573#0" expanded="true" />
-                    <element signature="e#39576#41440#0" expanded="true" />
+                    <element signature="e#8990#10350#0" expanded="true" />
+                    <element signature="e#14482#15527#0" expanded="true" />
+                    <element signature="e#36221#37324#0" expanded="true" />
+                    <element signature="e#37326#39877#0" expanded="true" />
+                    <element signature="e#39880#41744#0" expanded="true" />
                   </folding>
                 </state>
               </provider>
@@ -90,7 +67,7 @@
             <entry file="file://$PROJECT_DIR$/src/zookeeper/stats.c">
               <provider selected="true" editor-type-id="text-editor">
                 <state relative-caret-position="478">
-                  <caret line="81" column="89" lean-forward="true" selection-start-line="81" selection-start-column="89" selection-end-line="81" selection-end-column="89" />
+                  <caret line="81" column="89" lean-forward="false" selection-start-line="81" selection-start-column="89" selection-end-line="81" selection-end-column="89" />
                   <folding>
                     <element signature="e#5893#8514#0" expanded="true" />
                   </folding>
@@ -101,10 +78,23 @@
           <file leaf-file-name="leader.c" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/src/zookeeper/leader.c">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="512">
-                  <caret line="205" column="8" lean-forward="true" selection-start-line="205" selection-start-column="8" selection-end-line="205" selection-end-column="8" />
+                <state relative-caret-position="504">
+                  <caret line="187" column="4" lean-forward="true" selection-start-line="187" selection-start-column="4" selection-end-line="188" selection-end-column="39" />
                   <folding>
                     <element signature="e#0#17#0" expanded="true" />
+                  </folding>
+                </state>
+              </provider>
+            </entry>
+          </file>
+          <file leaf-file-name="optik_mod.h" pinned="false" current-in-tab="false">
+            <entry file="file://$PROJECT_DIR$/include/optik/optik_mod.h">
+              <provider selected="true" editor-type-id="text-editor">
+                <state relative-caret-position="729">
+                  <caret line="285" column="0" lean-forward="false" selection-start-line="285" selection-start-column="0" selection-end-line="285" selection-end-column="0" />
+                  <folding>
+                    <element signature="e#960#980#0" expanded="true" />
+                    <element signature="e#1038#1057#0" expanded="true" />
                   </folding>
                 </state>
               </provider>
@@ -113,9 +103,25 @@
           <file leaf-file-name="follower.c" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/src/zookeeper/follower.c">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="872">
-                  <caret line="170" column="72" lean-forward="false" selection-start-line="170" selection-start-column="72" selection-end-line="170" selection-end-column="72" />
+                <state relative-caret-position="54">
+                  <caret line="4" column="1" lean-forward="true" selection-start-line="4" selection-start-column="1" selection-end-line="4" selection-end-column="1" />
                   <folding />
+                </state>
+              </provider>
+            </entry>
+          </file>
+          <file leaf-file-name="inline_util.h" pinned="false" current-in-tab="false">
+            <entry file="file://$PROJECT_DIR$/include/zookeeper/inline_util.h">
+              <provider selected="true" editor-type-id="text-editor">
+                <state relative-caret-position="706">
+                  <caret line="645" column="6" lean-forward="false" selection-start-line="645" selection-start-column="6" selection-end-line="645" selection-end-column="6" />
+                  <folding>
+                    <element signature="e#47#65#0" expanded="true" />
+                    <element signature="e#382#520#0" expanded="true" />
+                    <element signature="e#522#717#0" expanded="true" />
+                    <element signature="e#1282#1630#0" expanded="true" />
+                    <element signature="e#65209#67645#0" expanded="true" />
+                  </folding>
                 </state>
               </provider>
             </entry>
@@ -123,38 +129,13 @@
           <file leaf-file-name="cache.c" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/src/zookeeper/cache.c">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="306">
-                  <caret line="38" column="71" lean-forward="false" selection-start-line="38" selection-start-column="71" selection-end-line="38" selection-end-column="71" />
+                <state relative-caret-position="675">
+                  <caret line="232" column="23" lean-forward="false" selection-start-line="232" selection-start-column="23" selection-end-line="232" selection-end-column="23" />
                   <folding>
                     <element signature="e#102#124#0" expanded="true" />
+                    <element signature="e#448#1217#0" expanded="true" />
                     <element signature="e#1985#2040#0" expanded="true" />
                   </folding>
-                </state>
-              </provider>
-            </entry>
-          </file>
-          <file leaf-file-name="inline_util.h" pinned="false" current-in-tab="true">
-            <entry file="file://$PROJECT_DIR$/include/zookeeper/inline_util.h">
-              <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="481">
-                  <caret line="439" column="6" lean-forward="true" selection-start-line="439" selection-start-column="6" selection-end-line="439" selection-end-column="6" />
-                  <folding>
-                    <element signature="e#47#65#0" expanded="true" />
-                    <element signature="e#382#520#0" expanded="true" />
-                    <element signature="e#522#717#0" expanded="true" />
-                    <element signature="e#1282#1630#0" expanded="true" />
-                    <element signature="e#26923#28938#0" expanded="true" />
-                  </folding>
-                </state>
-              </provider>
-            </entry>
-          </file>
-          <file leaf-file-name="run-zookeeper.sh" pinned="false" current-in-tab="false">
-            <entry file="file://$PROJECT_DIR$/src/zookeeper/run-zookeeper.sh">
-              <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="108">
-                  <caret line="6" column="22" lean-forward="false" selection-start-line="6" selection-start-column="22" selection-end-line="6" selection-end-column="22" />
-                  <folding />
                 </state>
               </provider>
             </entry>
@@ -190,11 +171,11 @@
       </split-first>
       <split-second>
         <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-          <file leaf-file-name="main.h" pinned="false" current-in-tab="false">
+          <file leaf-file-name="main.h" pinned="false" current-in-tab="true">
             <entry file="file://$PROJECT_DIR$/include/zookeeper/main.h">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="846">
-                  <caret line="89" column="56" lean-forward="true" selection-start-line="89" selection-start-column="56" selection-end-line="89" selection-end-column="56" />
+                <state relative-caret-position="504">
+                  <caret line="28" column="29" lean-forward="false" selection-start-line="28" selection-start-column="29" selection-end-line="28" selection-end-column="29" />
                   <folding>
                     <element signature="e#51#70#0" expanded="true" />
                   </folding>
@@ -227,20 +208,21 @@
           <file leaf-file-name="cache.h" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/include/zookeeper/cache.h">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="246">
-                  <caret line="17" column="22" lean-forward="false" selection-start-line="17" selection-start-column="22" selection-end-line="17" selection-end-column="22" />
+                <state relative-caret-position="306">
+                  <caret line="17" column="24" lean-forward="false" selection-start-line="17" selection-start-column="24" selection-end-line="17" selection-end-column="24" />
                   <folding>
+                    <element signature="e#88#122#0" expanded="true" />
                     <element signature="e#130#152#0" expanded="true" />
                   </folding>
                 </state>
               </provider>
             </entry>
           </file>
-          <file leaf-file-name="hrd.h" pinned="false" current-in-tab="true">
+          <file leaf-file-name="hrd.h" pinned="false" current-in-tab="false">
             <entry file="file://$PROJECT_DIR$/include/libhrd/hrd.h">
               <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="247">
-                  <caret line="19" column="19" lean-forward="true" selection-start-line="19" selection-start-column="19" selection-end-line="19" selection-end-column="19" />
+                <state relative-caret-position="342">
+                  <caret line="19" column="19" lean-forward="false" selection-start-line="19" selection-start-column="19" selection-end-line="19" selection-end-column="19" />
                   <folding>
                     <element signature="e#481#507#0" expanded="true" />
                     <element signature="e#2552#2603#0" expanded="true" />
@@ -256,35 +238,12 @@
               </provider>
             </entry>
           </file>
-          <file leaf-file-name="hrd_sizes.h" pinned="false" current-in-tab="false">
-            <entry file="file://$PROJECT_DIR$/include/libhrd/hrd_sizes.h">
-              <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="918">
-                  <caret line="51" column="23" lean-forward="false" selection-start-line="51" selection-start-column="23" selection-end-line="51" selection-end-column="23" />
-                  <folding />
-                </state>
-              </provider>
-            </entry>
-          </file>
-          <file leaf-file-name="stdio.h" pinned="false" current-in-tab="false">
-            <entry file="file:///usr/include/stdio.h">
-              <provider selected="true" editor-type-id="text-editor">
-                <state relative-caret-position="7110">
-                  <caret line="395" column="16" lean-forward="false" selection-start-line="395" selection-start-column="9" selection-end-line="395" selection-end-column="16" />
-                  <folding />
-                </state>
-              </provider>
-            </entry>
-          </file>
         </leaf>
       </split-second>
     </splitter>
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>commit_resp</find>
-      <find>coh_buf</find>
-      <find>polled_messages</find>
       <find>br_i</find>
       <find>i</find>
       <find>break</find>
@@ -295,23 +254,26 @@
       <find>LDR_QUOR</find>
       <find>fifo_id</find>
       <find>DEBUG_PREPARES</find>
-      <find>protocol</find>
       <find>only</find>
       <find>t_stats</find>
-      <find>w_mr</find>
       <find>%ZOOKEEPER_MAIN_H</find>
       <find>stalled_gid</find>
       <find>trace_ratio</find>
       <find>total_reqs</find>
       <find>memset</find>
       <find>ses</find>
-      <find>READY</find>
       <find>print_latency_stats</find>
-      <find>w_ops</find>
       <find>pre_post</find>
       <find>com</find>
-      <find>ass</find>
       <find>vas</find>
+      <find>trace s</find>
+      <find>protocol</find>
+      <find>w_mr</find>
+      <find>w_ops</find>
+      <find>propagate_updates</find>
+      <find>disable</find>
+      <find>READY</find>
+      <find>ass</find>
     </findStrings>
     <replaceStrings>
       <replace>zookeeper</replace>
@@ -328,13 +290,13 @@
       <replace>LEADER_PENDING_WRITES</replace>
       <replace>ack_buf_pull_ptr</replace>
       <replace>Follower</replace>
-      <replace>op[I]-&gt;</replace>
       <replace>prep</replace>
       <replace>ack</replace>
+      <replace>ZK_REGISTRY_IP</replace>
       <replace>%ld</replace>
       <replace>write</replace>
+      <replace>op[I]-&gt;</replace>
       <replace>ZOOKEEPER_MAIN_H</replace>
-      <replace>ZK_REGISTRY_IP</replace>
     </replaceStrings>
   </component>
   <component name="Git.Settings">
@@ -352,20 +314,20 @@
         <option value="$PROJECT_DIR$/src/zookeeper/run-zookeeper.sh" />
         <option value="$PROJECT_DIR$/include/libhrd/hrd_sizes.h" />
         <option value="$PROJECT_DIR$/CMakeLists.txt" />
-        <option value="$PROJECT_DIR$/src/zookeeper/cache.c" />
         <option value="$PROJECT_DIR$/include/mica/mica.h" />
-        <option value="$PROJECT_DIR$/src/zookeeper/leader.c" />
         <option value="$PROJECT_DIR$/src/zookeeper/main.c" />
         <option value="$PROJECT_DIR$/include/libhrd/hrd.h" />
-        <option value="$PROJECT_DIR$/src/zookeeper/follower.c" />
-        <option value="$PROJECT_DIR$/src/zookeeper/util.c" />
-        <option value="$PROJECT_DIR$/include/zookeeper/cache.h" />
-        <option value="$PROJECT_DIR$/include/zookeeper/inline_util.h" />
         <option value="$PROJECT_DIR$/include/zookeeper/util.h" />
-        <option value="$PROJECT_DIR$/include/zookeeper/main.h" />
         <option value="$PROJECT_DIR$/src/zookeeper/stats.c" />
         <option value="$PROJECT_DIR$/src/libhrd/hrd_util.c" />
         <option value="$PROJECT_DIR$/src/libhrd/hrd_conn.c" />
+        <option value="$PROJECT_DIR$/src/zookeeper/follower.c" />
+        <option value="$PROJECT_DIR$/src/zookeeper/leader.c" />
+        <option value="$PROJECT_DIR$/include/zookeeper/inline_util.h" />
+        <option value="$PROJECT_DIR$/src/zookeeper/cache.c" />
+        <option value="$PROJECT_DIR$/include/zookeeper/cache.h" />
+        <option value="$PROJECT_DIR$/src/zookeeper/util.c" />
+        <option value="$PROJECT_DIR$/include/zookeeper/main.h" />
       </list>
     </option>
   </component>
@@ -376,11 +338,11 @@
     <sorting>DEFINITION_ORDER</sorting>
   </component>
   <component name="OCFindUsagesOptions" text="true" ivars="false" properties="true" derivedClasses="false" />
-  <component name="ProjectFrameBounds" fullScreen="true">
-    <option name="x" value="-145" />
-    <option name="y" value="24" />
-    <option name="width" value="1400" />
-    <option name="height" value="1000" />
+  <component name="ProjectFrameBounds" extendedState="6">
+    <option name="x" value="2605" />
+    <option name="y" value="-4" />
+    <option name="width" value="1853" />
+    <option name="height" value="1204" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectView">
@@ -446,15 +408,15 @@
       <workItem from="1523630227731" duration="1796000" />
       <workItem from="1523873360378" duration="69907000" />
       <workItem from="1525085085904" duration="113682000" />
-      <workItem from="1525770326864" duration="160881000" />
+      <workItem from="1525770326864" duration="175686000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="346266000" />
+    <option name="totallyTimeSpent" value="361071000" />
   </component>
   <component name="ToolWindowManager">
-    <frame x="-1" y="-35" width="1922" height="1236" extended-state="0" />
+    <frame x="1987" y="-4" width="1853" height="1084" extended-state="6" />
     <editor active="true" />
     <layout>
       <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.24986508" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
@@ -487,7 +449,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/zookeeper/util.c</url>
-          <line>404</line>
+          <line>411</line>
           <option name="timeStamp" value="2" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
@@ -497,12 +459,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/include/zookeeper/inline_util.h</url>
-          <line>721</line>
+          <line>722</line>
           <option name="timeStamp" value="28" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
           <url>file://$PROJECT_DIR$/src/zookeeper/util.c</url>
-          <line>611</line>
+          <line>618</line>
           <option name="timeStamp" value="30" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
@@ -539,6 +501,7 @@
         <state relative-caret-position="5058">
           <caret line="281" column="89" lean-forward="false" selection-start-line="281" selection-start-column="86" selection-end-line="281" selection-end-column="89" />
           <folding>
+            <element signature="e#88#122#0" expanded="true" />
             <element signature="e#130#152#0" expanded="true" />
           </folding>
         </state>
@@ -629,6 +592,7 @@
           <caret line="498" column="0" lean-forward="false" selection-start-line="498" selection-start-column="0" selection-end-line="498" selection-end-column="0" />
           <folding>
             <element signature="e#102#124#0" expanded="true" />
+            <element signature="e#448#1217#0" expanded="true" />
             <element signature="e#1985#2040#0" expanded="true" />
           </folding>
         </state>
@@ -707,14 +671,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file:///usr/include/stdio.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="7110">
-          <caret line="395" column="16" lean-forward="false" selection-start-line="395" selection-start-column="9" selection-end-line="395" selection-end-column="16" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/include/mica/city.h">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="0">
@@ -722,13 +678,6 @@
           <folding>
             <element signature="e#2317#2336#0" expanded="true" />
           </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/README.md">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
@@ -741,16 +690,6 @@
             <element signature="e#879#898#0" expanded="true" />
             <element signature="e#924#941#0" expanded="true" />
             <element signature="e#949#969#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/include/optik/optik_mod.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="540">
-          <caret line="30" column="11" lean-forward="false" selection-start-line="30" selection-start-column="11" selection-end-line="30" selection-end-column="11" />
-          <folding>
-            <element signature="e#1038#1057#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -795,14 +734,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/include/libhrd/hrd_sizes.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="918">
-          <caret line="51" column="23" lean-forward="false" selection-start-line="51" selection-start-column="23" selection-end-line="51" selection-end-column="23" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/src/zookeeper/worker.c">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="-2404">
@@ -843,70 +774,12 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/zookeeper/cache.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="306">
-          <caret line="38" column="71" lean-forward="false" selection-start-line="38" selection-start-column="71" selection-end-line="38" selection-end-column="71" />
-          <folding>
-            <element signature="e#102#124#0" expanded="true" />
-            <element signature="e#1985#2040#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/src/zookeeper/main.c">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="1566">
           <caret line="120" column="0" lean-forward="false" selection-start-line="120" selection-start-column="0" selection-end-line="120" selection-end-column="0" />
           <folding>
             <element signature="e#0#18#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/src/zookeeper/follower.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="872">
-          <caret line="170" column="72" lean-forward="false" selection-start-line="170" selection-start-column="72" selection-end-line="170" selection-end-column="72" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/src/zookeeper/util.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="146">
-          <caret line="296" column="5" lean-forward="false" selection-start-line="296" selection-start-column="5" selection-end-line="296" selection-end-column="5" />
-          <folding>
-            <element signature="e#11646#12993#0" expanded="true" />
-            <element signature="e#17018#17401#0" expanded="true" />
-            <element signature="e#20799#22360#0" expanded="true" />
-            <element signature="e#22883#23807#0" expanded="true" />
-            <element signature="e#23809#24377#0" expanded="true" />
-            <element signature="e#27698#28551#0" expanded="true" />
-            <element signature="e#28789#31219#0" expanded="true" />
-            <element signature="e#35917#37020#0" expanded="true" />
-            <element signature="e#37022#39573#0" expanded="true" />
-            <element signature="e#39576#41440#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/include/zookeeper/cache.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="246">
-          <caret line="17" column="22" lean-forward="false" selection-start-line="17" selection-start-column="22" selection-end-line="17" selection-end-column="22" />
-          <folding>
-            <element signature="e#130#152#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/src/zookeeper/leader.c">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="512">
-          <caret line="205" column="8" lean-forward="true" selection-start-line="205" selection-start-column="8" selection-end-line="205" selection-end-column="8" />
-          <folding>
-            <element signature="e#0#17#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -924,37 +797,9 @@
     <entry file="file://$PROJECT_DIR$/src/zookeeper/stats.c">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="478">
-          <caret line="81" column="89" lean-forward="true" selection-start-line="81" selection-start-column="89" selection-end-line="81" selection-end-column="89" />
+          <caret line="81" column="89" lean-forward="false" selection-start-line="81" selection-start-column="89" selection-end-line="81" selection-end-column="89" />
           <folding>
             <element signature="e#5893#8514#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/include/zookeeper/main.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="846">
-          <caret line="89" column="56" lean-forward="true" selection-start-line="89" selection-start-column="56" selection-end-line="89" selection-end-column="56" />
-          <folding>
-            <element signature="e#51#70#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/include/libhrd/hrd.h">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="247">
-          <caret line="19" column="19" lean-forward="true" selection-start-line="19" selection-start-column="19" selection-end-line="19" selection-end-column="19" />
-          <folding>
-            <element signature="e#481#507#0" expanded="true" />
-            <element signature="e#2552#2603#0" expanded="true" />
-            <element signature="e#2629#2680#0" expanded="true" />
-            <element signature="e#6157#6896#0" expanded="true" />
-            <element signature="e#6898#7214#0" expanded="true" />
-            <element signature="e#7215#7799#0" expanded="true" />
-            <element signature="e#8409#8559#0" expanded="true" />
-            <element signature="e#8561#8754#0" expanded="true" />
-            <element signature="e#8756#8836#0" expanded="true" />
           </folding>
         </state>
       </provider>
@@ -982,16 +827,134 @@
         </state>
       </provider>
     </entry>
+    <entry file="file:///usr/include/stdio.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="362">
+          <caret line="395" column="16" lean-forward="false" selection-start-line="395" selection-start-column="9" selection-end-line="395" selection-end-column="16" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/libhrd/hrd_sizes.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="918">
+          <caret line="51" column="23" lean-forward="false" selection-start-line="51" selection-start-column="23" selection-end-line="51" selection-end-column="23" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/libhrd/hrd.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="342">
+          <caret line="19" column="19" lean-forward="false" selection-start-line="19" selection-start-column="19" selection-end-line="19" selection-end-column="19" />
+          <folding>
+            <element signature="e#481#507#0" expanded="true" />
+            <element signature="e#2552#2603#0" expanded="true" />
+            <element signature="e#2629#2680#0" expanded="true" />
+            <element signature="e#6157#6896#0" expanded="true" />
+            <element signature="e#6898#7214#0" expanded="true" />
+            <element signature="e#7215#7799#0" expanded="true" />
+            <element signature="e#8409#8559#0" expanded="true" />
+            <element signature="e#8561#8754#0" expanded="true" />
+            <element signature="e#8756#8836#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/README.md">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="108">
+          <caret line="6" column="64" lean-forward="false" selection-start-line="6" selection-start-column="64" selection-end-line="6" selection-end-column="64" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/zookeeper/follower.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="54">
+          <caret line="4" column="1" lean-forward="true" selection-start-line="4" selection-start-column="1" selection-end-line="4" selection-end-column="1" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/zookeeper/leader.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="504">
+          <caret line="187" column="4" lean-forward="true" selection-start-line="187" selection-start-column="4" selection-end-line="188" selection-end-column="39" />
+          <folding>
+            <element signature="e#0#17#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/include/zookeeper/inline_util.h">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="481">
-          <caret line="439" column="6" lean-forward="true" selection-start-line="439" selection-start-column="6" selection-end-line="439" selection-end-column="6" />
+        <state relative-caret-position="706">
+          <caret line="645" column="6" lean-forward="false" selection-start-line="645" selection-start-column="6" selection-end-line="645" selection-end-column="6" />
           <folding>
             <element signature="e#47#65#0" expanded="true" />
             <element signature="e#382#520#0" expanded="true" />
             <element signature="e#522#717#0" expanded="true" />
             <element signature="e#1282#1630#0" expanded="true" />
-            <element signature="e#26923#28938#0" expanded="true" />
+            <element signature="e#65209#67645#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/zookeeper/cache.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="675">
+          <caret line="232" column="23" lean-forward="false" selection-start-line="232" selection-start-column="23" selection-end-line="232" selection-end-column="23" />
+          <folding>
+            <element signature="e#102#124#0" expanded="true" />
+            <element signature="e#448#1217#0" expanded="true" />
+            <element signature="e#1985#2040#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/optik/optik_mod.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="729">
+          <caret line="285" column="0" lean-forward="false" selection-start-line="285" selection-start-column="0" selection-end-line="285" selection-end-column="0" />
+          <folding>
+            <element signature="e#960#980#0" expanded="true" />
+            <element signature="e#1038#1057#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/zookeeper/cache.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="306">
+          <caret line="17" column="24" lean-forward="false" selection-start-line="17" selection-start-column="24" selection-end-line="17" selection-end-column="24" />
+          <folding>
+            <element signature="e#88#122#0" expanded="true" />
+            <element signature="e#130#152#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/src/zookeeper/util.c">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="452">
+          <caret line="362" column="13" lean-forward="false" selection-start-line="362" selection-start-column="13" selection-end-line="362" selection-end-column="13" />
+          <folding>
+            <element signature="e#8990#10350#0" expanded="true" />
+            <element signature="e#14482#15527#0" expanded="true" />
+            <element signature="e#36221#37324#0" expanded="true" />
+            <element signature="e#37326#39877#0" expanded="true" />
+            <element signature="e#39880#41744#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/include/zookeeper/main.h">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="504">
+          <caret line="28" column="29" lean-forward="false" selection-start-line="28" selection-start-column="29" selection-end-line="28" selection-end-column="29" />
+          <folding>
+            <element signature="e#51#70#0" expanded="true" />
           </folding>
         </state>
       </provider>

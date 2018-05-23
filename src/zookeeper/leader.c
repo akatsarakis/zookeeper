@@ -24,8 +24,8 @@ void *leader(void *arg)
 
   uint32_t ack_buf_push_ptr = 0, ack_buf_pull_ptr = 0;
   uint32_t w_buf_push_ptr = 0, w_buf_pull_ptr = 0;
-  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf); // leave a slot for the credits
-  volatile struct  w_message_ud_req *w_buffer = (struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
+  struct ack_message_ud_req *ack_buffer = (struct ack_message_ud_req *)(cb->dgram_buf);
+  volatile struct  w_message_ud_req *w_buffer = (volatile struct w_message_ud_req *)(cb->dgram_buf + LEADER_ACK_BUF_SIZE);
 	/* ---------------------------------------------------------------------------
 	------------------------------MULTICAST SET UP-------------------------------
 	---------------------------------------------------------------------------*/
@@ -185,7 +185,8 @@ void *leader(void *arg)
     ---------------------------------------------------------------------------*/
 
 
-		// Propagate the updates before probing the cache
+    // Get a new batch from the trace, pass it through the cache and create
+    // the appropriate prepare messages
 		trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
                                            (uint8_t)FOLLOWER_MACHINE_NUM, p_writes, resp,
                                            &latency_info, &start, protocol);
