@@ -37,7 +37,7 @@ void cache_init(int cache_id, int num_threads) {
 	for(i = 0; i < num_threads; i++)
 		cache_meta_reset(&cache.meta[i]);
 	mica_init(&cache.hash_table, cache_id, CACHE_SOCKET, CACHE_NUM_BKTS, HERD_LOG_CAP);
-	cache_populate_fixed_len(&cache.hash_table, CACHE_NUM_KEYS, HERD_VALUE_SIZE);
+	cache_populate_fixed_len(&cache.hash_table, CACHE_NUM_KEYS, VALUE_SIZE);
 }
 
 
@@ -126,9 +126,11 @@ inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op
 				if ((*op)[I].opcode == CACHE_OP_GET) {
 					//Lock free reads through versioning (successful when version is even)
 					do {
-						memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
-						resp[I].val_ptr = kv_ptr[I]->value;
-						resp[I].val_len = kv_ptr[I]->val_len;
+						//memcpy((void*) &prev_meta, (void*) &(kv_ptr[I]->key.meta), sizeof(cache_meta));
+						prev_meta = kv_ptr[I]->key.meta;
+						memcpy((*op)[I].value, kv_ptr[I]->value, VALUE_SIZE);
+						//resp[I].val_ptr = kv_ptr[I]->value;
+						//resp[I].val_len = kv_ptr[I]->val_len;
 					} while (!optik_is_same_version_and_valid(prev_meta, kv_ptr[I]->key.meta));
 					resp[I].type = CACHE_GET_SUCCESS;
 
@@ -229,7 +231,7 @@ inline void cache_batch_op_updates(uint32_t op_num, int thread_id, struct prepar
 //          red_printf("op val len %d in ptr %d, total ops %d \n", op->val_len, (pull_ptr + I) % max_op_size, op_num );
           if (ENABLE_ASSERTIONS) assert(op->val_len == kv_ptr[I]->val_len);
           optik_lock(&kv_ptr[I]->key.meta);
-          memcpy(kv_ptr[I]->value, op->value, kv_ptr[I]->val_len);
+          memcpy(kv_ptr[I]->value, op->value, VALUE_SIZE);
           optik_unlock_write(&kv_ptr[I]->key.meta, (uint8_t) machine_id,(uint32_t*) &op->key.meta.version);
           resp[I].val_len = 0;
           resp[I].val_ptr = NULL;

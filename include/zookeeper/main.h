@@ -95,7 +95,7 @@
 #define LEADER 2
 
 #define MIN_SS_BATCH 127// The minimum SS batch
-#define ENABLE_ASSERTIONS 0
+#define ENABLE_ASSERTIONS 1
 #define ENABLE_STAT_COUNTING 1
 #define MAXIMUM_INLINE_SIZE 188
 
@@ -123,7 +123,7 @@
 
 
 // -------ACKS-------------
-#define USE_QUORUM 1
+#define USE_QUORUM 0
 #define QUORUM_NUM ((MACHINE_NUM / 2) + 1)
 #define LDR_QUORUM_OF_ACKS (USE_QUORUM == 1 ? (QUORUM_NUM - 1): FOLLOWER_MACHINE_NUM) //()
 
@@ -261,7 +261,7 @@
 #define DEBUG_PREPARES 0
 #define DEBUG_ACKS 0
 #define DEBUG_WRITES 0
-#define FLR_CHECK_DBG_COUNTERS 1
+#define FLR_CHECK_DBG_COUNTERS 0
 
 
 

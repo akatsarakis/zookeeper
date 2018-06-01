@@ -356,12 +356,12 @@ int pin_thread(int t_id) {
     if(core > TOTAL_CORES_) { //if you run out of cores in numa node 0
         if (ENABLE_HYPERTHREADING) { //use hyperthreading rather than go to the other socket
             core = PHYSICAL_CORE_DISTANCE * (t_id - PHYSICAL_CORES_PER_SOCKET) + 2;
-          if (core > TOTAL_CORES_) { // now go to the other socket
-            core = PHYSICAL_CORE_DISTANCE * (t_id - 20) + 1 ;
-            if (core > TOTAL_CORES_) { // again do hyperthreading on the second socket
-              core = PHYSICAL_CORE_DISTANCE * (t_id - 30) + 3;
+            if (core > TOTAL_CORES_) { // now go to the other socket
+                core = PHYSICAL_CORE_DISTANCE * (t_id - 20) + 1 ;
+                if (core > TOTAL_CORES_) { // again do hyperthreading on the second socket
+                    core = PHYSICAL_CORE_DISTANCE * (t_id - 30) + 3;
+                }
             }
-          }
         }
         else { //spawn clients to numa node 1
             core = (t_id - PHYSICAL_CORES_PER_SOCKET) * PHYSICAL_CORE_DISTANCE + 1;
@@ -507,7 +507,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int 
       preps[i].opcode = CACHE_OP_PUT;
       for (uint16_t j = 0; j < MAX_PREP_COALESCE; j++) {
         preps[i].prepare[j].opcode = CACHE_OP_PUT;
-        preps[i].prepare[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+        preps[i].prepare[j].val_len = VALUE_SIZE >> SHIFT_BITS;
       }
     }
   } else { // PROTOCOL = FOLLOWER
@@ -515,7 +515,7 @@ void set_up_pending_writes(struct pending_writes **p_writes, uint32_t size, int 
     for (i = 0; i < W_FIFO_SIZE; i++) {
       for (uint16_t j = 0; j < MAX_W_COALESCE; j++) {
         writes[i].write[j].opcode = CACHE_OP_PUT;
-        writes[i].write[j].val_len = HERD_VALUE_SIZE >> SHIFT_BITS;
+        writes[i].write[j].val_len = VALUE_SIZE >> SHIFT_BITS;
       }
     }
   }

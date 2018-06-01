@@ -293,11 +293,11 @@ static inline void check_ldr_p_states(struct pending_writes *p_writes, uint16_t 
   uint32_t inside_prep_ptr = preps[prep_ptr].coalesce_num;
   uint16_t w_ptr = p_writes->push_ptr;
 
-  memcpy(&preps[prep_ptr].prepare[inside_prep_ptr].key, &(write->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
+  memcpy(preps[prep_ptr].prepare[inside_prep_ptr].key, (write->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
   p_writes->ptrs_to_ops[w_ptr] = &preps[prep_ptr].prepare[inside_prep_ptr];
   preps[prep_ptr].prepare[inside_prep_ptr].flr_id = flr_id; //FOLLOWER_MACHINE_NUM means it's a leader message
-  if (!local) memcpy(&preps[prep_ptr].prepare[inside_prep_ptr].session_id, &session_id, 3);
-//  else memset(&preps[prep_ptr].prepare[inside_prep_ptr].session_id, 0, 3);
+  if (!local) memcpy(preps[prep_ptr].prepare[inside_prep_ptr].session_id, &session_id, 3);
+//  else memset(preps[prep_ptr].prepare[inside_prep_ptr].session_id, 0, 3);
   if (inside_prep_ptr == 0) {
     p_writes->prep_fifo->backward_ptrs[prep_ptr] = w_ptr;
     uint32_t message_l_id = (uint32_t) (p_writes->local_w_id + p_writes->size);
@@ -312,8 +312,7 @@ static inline void check_ldr_p_states(struct pending_writes *p_writes, uint16_t 
         }
       }
     }
-//        printf("message_lid %u, local_wid %lu, p_writes size %u \n", message_l_id, p_writes->local_w_id, p_writes->size);
-    memcpy(&preps[prep_ptr].l_id, &message_l_id, 4);
+    memcpy(preps[prep_ptr].l_id, &message_l_id, 4);
   }
 
   if (ENABLE_ASSERTIONS) {
@@ -356,7 +355,7 @@ static inline void flr_insert_write(struct pending_writes *p_writes, struct writ
   uint32_t inside_prep_ptr = w_mes[w_ptr].write[0].w_num;
 
 
-  memcpy(&w_mes[w_ptr].write[inside_prep_ptr].key, &(write->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
+  memcpy(w_mes[w_ptr].write[inside_prep_ptr].key, (write->key), TRUE_KEY_SIZE + 2 + VALUE_SIZE);
   w_mes[w_ptr].write[inside_prep_ptr].flr_id = flr_id;
   memcpy(w_mes[w_ptr].write[inside_prep_ptr].session_id, &session_id, sizeof(uint32_t));
   //    printf("Passed session id %u to the write in message %u, with inside ptr %u\n",
