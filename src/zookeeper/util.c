@@ -152,6 +152,8 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
     }
     // printf("File %s has %d lines \n", path, cmd_count);
     (*cmds) = (struct trace_command *)malloc((cmd_count + 1) * sizeof(struct trace_command));
+    uint seed = (uint) time(NULL) + ((machine_id * LEADERS_PER_MACHINE) + gid) + (uint) (*cmds);
+    srand (seed);
     int debug_cnt = 0;
     //parse file line by line and insert trace to cmd.
     for (i = 0; i < cmd_count; i++) {
@@ -231,7 +233,8 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
 void manufacture_trace(struct trace_command **cmds, int g_id)
 {
   (*cmds) = (struct trace_command *)malloc((TRACE_SIZE + 1) * sizeof(struct trace_command));
-
+  uint seed = (uint) time(NULL) + ((machine_id * LEADERS_PER_MACHINE) + g_id) + (uint) (*cmds);
+  srand (seed);
   uint32_t i, writes = 0;
   //parse file line by line and insert trace to cmd.
   for (i = 0; i < TRACE_SIZE; i++) {
