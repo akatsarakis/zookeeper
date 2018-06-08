@@ -108,7 +108,7 @@ void get_qps_from_all_other_machines(uint16_t g_id, struct hrd_ctrl_blk *cb);
 // Used by all kinds of threads to publish their QPs
 void publish_qps(uint32_t qp_num, uint32_t global_id, const char* qp_name, struct hrd_ctrl_blk *cb);
 
-int parse_trace(char* path, struct trace_command **cmds, int gid);
+int parse_trace(char* path, struct trace_command **cmds, int g_id);
 
 
 void trace_init(struct trace_command **cmds, int g_id);

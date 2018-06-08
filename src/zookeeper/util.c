@@ -114,7 +114,7 @@ void get_qps_from_one_machine(uint16_t g_id, struct hrd_ctrl_blk *cb) {
 }
 
 // Parse a trace, use this for skewed workloads as uniform trace can be manufactured easilly
-int parse_trace(char* path, struct trace_command **cmds, int gid){
+int parse_trace(char* path, struct trace_command **cmds, int g_id){
     FILE * fp;
     ssize_t read;
     size_t len = 0;
@@ -152,8 +152,10 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
     }
     // printf("File %s has %d lines \n", path, cmd_count);
     (*cmds) = (struct trace_command *)malloc((cmd_count + 1) * sizeof(struct trace_command));
-    uint seed = (uint) time(NULL) + ((machine_id * LEADERS_PER_MACHINE) + gid) + (uint) (*cmds);
-    srand (seed);
+    struct timespec time;
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    uint64_t seed = time.tv_nsec + ((machine_id * LEADERS_PER_MACHINE) + g_id) + (uint64_t)(*cmds);
+    srand ((uint)seed);
     int debug_cnt = 0;
     //parse file line by line and insert trace to cmd.
     for (i = 0; i < cmd_count; i++) {
@@ -211,13 +213,13 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
             word_count++;
             word = strtok_r(NULL, " ", &saveptr);
             if (word == NULL && word_count < 4) {
-                printf("Client %d Error: Reached word %d in line %d : %s \n",gid, word_count, i, line);
+                printf("Client %d Error: Reached word %d in line %d : %s \n",g_id, word_count, i, line);
                 assert(false);
             }
         }
 
     }
-    if (gid  == 0) printf("Write Ratio: %.2f%% \n", (double) (writes * 100) / cmd_count);
+    if (g_id  == 0) printf("Write Ratio: %.2f%% \n", (double) (writes * 100) / cmd_count);
     (*cmds)[cmd_count].opcode = NOP;
     // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
     //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
@@ -233,8 +235,10 @@ int parse_trace(char* path, struct trace_command **cmds, int gid){
 void manufacture_trace(struct trace_command **cmds, int g_id)
 {
   (*cmds) = (struct trace_command *)malloc((TRACE_SIZE + 1) * sizeof(struct trace_command));
-  uint seed = (uint) time(NULL) + ((machine_id * LEADERS_PER_MACHINE) + g_id) + (uint) (*cmds);
-  srand (seed);
+  struct timespec time;
+  clock_gettime(CLOCK_MONOTONIC, &time);
+  uint64_t seed = time.tv_nsec + ((machine_id * LEADERS_PER_MACHINE) + g_id) + (uint64_t)(*cmds);
+  srand ((uint)seed);
   uint32_t i, writes = 0;
   //parse file line by line and insert trace to cmd.
   for (i = 0; i < TRACE_SIZE; i++) {

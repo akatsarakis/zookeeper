@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-#houston-sanantonio-austin-indianapolis-philly-chicago-detroit-baltimore-atlanta
-#allIPs=(192.168.5.18 192.168.5.17 192.168.5.19  129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
+houston-sanantonio-austin-indianapolis-philly-chicago-detroit-baltimore-atlanta
+allIPs=(192.168.5.18 192.168.5.17 192.168.5.19  129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
 
-houston-sanantonio-philly-austin-indianapolis-chicago-detroit-baltimore-atlanta
-allIPs=(192.168.5.18 192.168.5.17 192.168.5.15 192.168.5.19  129.215.165.6 129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
+#houston-sanantonio-philly-austin-indianapolis-chicago-detroit-baltimore-atlanta
+#allIPs=(192.168.5.18 192.168.5.17 192.168.5.15 192.168.5.19  129.215.165.6 129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
 localIP=$(ip addr | grep 'infiniband' -A2 | sed -n 2p | awk '{print $2}' | cut -f1  -d'/')
 
 tmp=$((${#localIP}-1))
@@ -28,7 +28,7 @@ export ZK_REGISTRY_IP="129.215.165.8" # I.E. HOUSTON
 export MLX5_SINGLE_THREADED=1
 export MLX5_SCATTER_TO_CQE=1
 
-#sudo killall memcached
+sudo killall memcached
 sudo killall zookeeper
 
 # A function to echo in blue color

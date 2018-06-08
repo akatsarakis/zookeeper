@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 HOSTS=( "houston" "sanantonio")
 HOSTS=( "austin" "houston" "sanantonio")
-HOSTS=( "sanantonio" "houston" "philly" "austin")
+#HOSTS=( "sanantonio" "houston" "philly" "austin")
 #HOSTS=( "austin" "houston" "sanantonio" "indianapolis" "philly" )
 #HOSTS=( "austin" "houston" "sanantonio" "indianapolis" "philly" "baltimore" "chicago" "atlanta" "detroit")
 LOCAL_HOST=`hostname`
