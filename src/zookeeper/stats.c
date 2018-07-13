@@ -27,8 +27,8 @@ void *print_stats(void* no_arg) {
 //        memcpy(curr_w_stats, (void*) f_stats, FOLLOWERS_PER_MACHINE * (sizeof(struct follower_stats)));
     all_clients_cache_hits = 0;
     print_count++;
-    if (EXIT_ON_PRINT == 1 && print_count == PRINT_NUM) {
-      if (MEASURE_LATENCY && machine_id == 0) print_latency_stats();
+    if (EXIT_ON_PRINT&& print_count == PRINT_NUM) {
+      if (MEASURE_LATENCY && machine_id == LATENCY_MACHINE) print_latency_stats();
       printf("---------------------------------------\n");
       printf("------------RUN TERMINATED-------------\n");
       printf("---------------------------------------\n");
@@ -137,25 +137,18 @@ void print_latency_stats(void){
             CACHE_BATCH_SIZE);
 
     latency_stats_fd = fopen(filename, "w");
-    fprintf(latency_stats_fd, "#---------------- Remote Reqs --------------\n");
-    for(i = 0; i < LATENCY_BUCKETS; ++i)
-        fprintf(latency_stats_fd, "rr: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.remote_reqs[i]);
-    fprintf(latency_stats_fd, "rr: -1, %d\n",latency_count.remote_reqs[LATENCY_BUCKETS]); //print outliers
-
-    fprintf(latency_stats_fd, "#---------------- Local Reqs ---------------\n");
-    for(i = 0; i < LATENCY_BUCKETS; ++i)
-        fprintf(latency_stats_fd, "lr: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.local_reqs[i]);
-    fprintf(latency_stats_fd, "lr: -1, %d\n",latency_count.local_reqs[LATENCY_BUCKETS]); //print outliers
 
     fprintf(latency_stats_fd, "#---------------- Hot Reads ----------------\n");
     for(i = 0; i < LATENCY_BUCKETS; ++i)
-        fprintf(latency_stats_fd, "hr: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.hot_reads[i]);
-    fprintf(latency_stats_fd, "hr: -1, %d\n",latency_count.hot_reads[LATENCY_BUCKETS]); //print outliers
+        fprintf(latency_stats_fd, "reads: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.hot_reads[i]);
+    fprintf(latency_stats_fd, "reads: -1, %d\n", latency_count.hot_reads[LATENCY_BUCKETS]); //print outliers
+    fprintf(latency_stats_fd, "reads-hl: %d\n", latency_count.max_read_lat); //print max
 
     fprintf(latency_stats_fd, "#---------------- Hot Writes ---------------\n");
     for(i = 0; i < LATENCY_BUCKETS; ++i)
-        fprintf(latency_stats_fd, "hw: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.hot_writes[i]);
-    fprintf(latency_stats_fd, "hw: -1, %d\n",latency_count.hot_writes[LATENCY_BUCKETS]); //print outliers
+        fprintf(latency_stats_fd, "writes: %d, %d\n",i * (MAX_LATENCY / LATENCY_BUCKETS), latency_count.hot_writes[i]);
+    fprintf(latency_stats_fd, "writes: -1, %d\n", latency_count.hot_writes[LATENCY_BUCKETS]); //print outliers
+    fprintf(latency_stats_fd, "writes-hl: %d\n", latency_count.max_write_lat); //print max
 
     fclose(latency_stats_fd);
 

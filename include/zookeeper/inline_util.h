@@ -51,6 +51,28 @@ static inline bool trigger_measurement(uint16_t local_client_id)
 		   local_client_id == 0 && machine_id == MACHINE_NUM -1;
 }
 
+//Add latency to histogram (in microseconds)
+static inline void bookkeep_latency(int useconds, req_type rt){
+  uint32_t** latency_counter;
+  switch (rt){
+    case HOT_READ_REQ:
+      latency_counter = &latency_count.hot_reads;
+      if (useconds > latency_count.max_read_lat) latency_count.max_read_lat = (uint32_t) useconds;
+      break;
+    case HOT_WRITE_REQ:
+      latency_counter = &latency_count.hot_writes;
+      if (useconds > latency_count.max_write_lat) latency_count.max_write_lat = (uint32_t) useconds;
+      break;
+    default: assert(0);
+  }
+  latency_count.total_measurements++;
+
+  if (useconds > MAX_LATENCY)
+    (*latency_counter)[MAX_LATENCY]++;
+  else
+    (*latency_counter)[useconds / (MAX_LATENCY / LATENCY_BUCKETS)]++;
+}
+
 // Poll for the local reqs completion to measure a local req's latency
 static inline void poll_local_req_for_latency_measurement(struct latency_flags* latency_info, struct timespec* start,
 														  struct local_latency* local_measure)
@@ -93,6 +115,59 @@ static inline void report_remote_latency(struct latency_flags* latency_info, uin
 		}
 	}
 }
+
+
+// The follower sends a write to the leader and tags it with a session id. When the leaders sends a prepare,
+// it includes that session id and a flr id
+// the follower inspects the flr id, such that it can unblock the session id, if the write originated locally
+// we hijack that connection for the latency, remembering the session that gets stuck on a write
+static inline void change_latency_tag(struct latency_flags*latency_info, struct pending_writes *p_writes,
+                                      uint16_t t_id)
+{
+  if (latency_info->measured_req_flag == HOT_WRITE_REQ_BEFORE_CACHE &&
+      machine_id == LATENCY_MACHINE && t_id == 0 &&
+      latency_info->last_measured_sess_id == p_writes->session_id[p_writes->pull_ptr])
+    latency_info-> measured_req_flag = HOT_WRITE_REQ;
+}
+
+// Both writes and reads of zookeeper use this to report their latency
+static inline void report_latency(struct latency_flags* latency_info)
+{
+  struct timespec end;
+  clock_gettime(CLOCK_MONOTONIC, &end);
+  int useconds = ((end.tv_sec - latency_info->start.tv_sec) * 1000000) +
+                 ((end.tv_nsec - latency_info->start.tv_nsec) / 1000);  //(end.tv_nsec - start->tv_nsec) / 1000;
+  //if (ENABLE_ASSERTIONS) assert(useconds > 0);
+  		//printf("Latency of a reqof type %d is  %u us\n", latency_info->measured_req_flag, useconds);
+  bookkeep_latency(useconds, latency_info->measured_req_flag);
+  (latency_info->measured_req_flag) = NO_REQ;
+}
+
+
+// Necessary bookkeeping to initiate the latency measurement
+static inline void start_measurement(struct latency_flags* latency_info, uint32_t sess_id, uint16_t t_id,
+                                     uint8_t opcode, bool is_ldr) {
+
+  if ((latency_info->measured_req_flag) == NO_REQ) {
+    if (t_stats[t_id].cache_hits_per_thread > M_1 && (sess_id % 10 == 0) && t_id == 0 && machine_id == LATENCY_MACHINE) {
+      //printf("tag a key for latency measurement \n");
+      if (opcode == CACHE_OP_GET) latency_info->measured_req_flag = HOT_READ_REQ;
+      else if (opcode == CACHE_OP_PUT) {
+        latency_info->measured_req_flag = is_ldr ? HOT_WRITE_REQ : HOT_WRITE_REQ_BEFORE_CACHE;
+        latency_info->last_measured_sess_id = sess_id;
+
+      }
+      else if (ENABLE_ASSERTIONS) assert(false);
+      //green_printf("Measuring a req %llu, opcode %d, flag %d op_i %d \n",
+			//					 t_stats[t_id].cache_hits_per_thread, opcode, latency_info->measured_req_flag, latency_info->last_measured_sess_id);
+
+      clock_gettime(CLOCK_MONOTONIC, &latency_info->start);
+      if (ENABLE_ASSERTIONS) assert(latency_info->measured_req_flag != NO_REQ);
+    }
+  }
+}
+
+
 
 /* ---------------------------------------------------------------------------
 //------------------------------ ZOOKEEPER GENERIC -----------------------------
@@ -378,7 +453,7 @@ static inline void flr_insert_write(struct pending_writes *p_writes, struct writ
 static inline uint32_t batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t_id, struct trace_command *trace,
                                                  struct cache_op *ops, uint8_t flr_id,
                                                  struct pending_writes *p_writes, struct mica_resp *resp,
-                                                 struct latency_flags *latency_info, struct timespec *start,
+                                                 struct latency_flags *latency_info,
                                                  int protocol)
 {
   int i = 0, op_i = 0;
@@ -401,6 +476,7 @@ static inline uint32_t batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t
     *(uint128 *) &ops[op_i] = trace[trace_iter].key_hash;
     ops[op_i].opcode = is_update ? (uint8_t) CACHE_OP_PUT : (uint8_t) CACHE_OP_GET;
     ops[op_i].val_len = is_update ? (uint8_t) (VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0;
+    if (MEASURE_LATENCY) start_measurement(latency_info, working_session, t_id, ops[op_i].opcode, protocol == LEADER);
     if (is_update) {
       if (protocol == LEADER) ldr_insert_write(p_writes, (struct prepare *)&ops[op_i], (uint32_t)working_session, true, FOLLOWER_MACHINE_NUM, t_id);
       else if (protocol == FOLLOWER) flr_insert_write(p_writes, (struct write *)&ops[op_i], (uint32_t)working_session, flr_id, t_id);
@@ -426,6 +502,9 @@ static inline uint32_t batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t
   }
   t_stats[t_id].cache_hits_per_thread += op_i;
   cache_batch_op_trace(op_i, t_id, &ops, resp);
+  if (MEASURE_LATENCY && machine_id == LATENCY_MACHINE && t_id == 0 &&
+      latency_info->measured_req_flag == HOT_READ_REQ)
+    report_latency(latency_info);
   return trace_iter;
 }
 
@@ -608,7 +687,8 @@ static inline void forge_commit_message(struct commit_fifo *com_fifo, uint64_t l
 
 // Leader propagates Updates that have seen all acks to the KVS
 static inline void propagate_updates(struct pending_writes *p_writes, struct commit_fifo *com_fifo,
-																		 struct mica_resp *resp, uint16_t t_id, uint32_t *dbg_counter)
+																		 struct mica_resp *resp, struct latency_flags *latency_info,
+                                     uint16_t t_id, uint32_t *dbg_counter)
 {
 //  printf("Ldr %d propagating updates \n", t_id);
 	uint16_t update_op_i = 0;
@@ -644,6 +724,10 @@ static inline void propagate_updates(struct pending_writes *p_writes, struct com
     if (!DISABLE_UPDATING_KVS)
       cache_batch_op_updates((uint32_t) update_op_i, 0, p_writes->ptrs_to_ops, resp, pull_ptr, LEADER_PENDING_WRITES, false);
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+    if (MEASURE_LATENCY && latency_info->measured_req_flag == HOT_WRITE_REQ &&
+        machine_id == LATENCY_MACHINE && t_id == 0 &&
+        latency_info->last_measured_sess_id < p_writes->local_w_id)
+      report_latency(latency_info);
 //    if (t_id == 0)  yellow_printf("Committed global id %lu \n", committed_g_id);
 	}
 }
@@ -1266,7 +1350,7 @@ static inline void send_credits_for_commits(struct recv_info *com_recv_info, str
 
 
 
-// Form the Write work request for the prepare
+// Form the Write work request for the write
 static inline void forge_w_wr(struct pending_writes *p_writes,
                               struct hrd_ctrl_blk *cb, struct ibv_sge *w_send_sgl,
                               struct ibv_send_wr *w_send_wr, long *w_tx,
@@ -1446,6 +1530,7 @@ static inline void poll_for_coms(struct com_message_ud_req *incoming_coms, uint3
 // Follower propagate sUpdates that have seen all acks to the KVS
 static inline void flr_propagate_updates(struct pending_writes *p_writes, struct pending_acks *p_acks,
                                          struct mica_resp *resp, struct fifo *prep_buf_mirror,
+                                         struct latency_flags *latency_info,
                                          uint16_t t_id, uint32_t *dbg_counter)
 {
 	uint16_t update_op_i = 0;
@@ -1471,6 +1556,11 @@ static inline void flr_propagate_updates(struct pending_writes *p_writes, struct
 			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;
+      if (MEASURE_LATENCY) change_latency_tag(latency_info, p_writes, t_id);
+      if (MEASURE_LATENCY && latency_info->measured_req_flag == HOT_WRITE_REQ_BEFORE_CACHE &&
+          machine_id == LATENCY_MACHINE && t_id == 0 &&
+          latency_info->last_measured_sess_id == p_writes->session_id[p_writes->pull_ptr])
+        latency_info->measured_req_flag = HOT_WRITE_REQ;
 		}
 		MOD_ADD(p_writes->pull_ptr, FLR_PENDING_WRITES);
 		update_op_i++;
@@ -1492,6 +1582,9 @@ static inline void flr_propagate_updates(struct pending_writes *p_writes, struct
       for (uint16_t i = 0; i < update_op_i; i++) p_writes->ptrs_to_ops[(pull_ptr + i) % FLR_PENDING_WRITES]->opcode = 5;
 
 		atomic_store_explicit(&committed_global_w_id, committed_g_id, memory_order_relaxed);
+    if (MEASURE_LATENCY && latency_info->measured_req_flag == HOT_WRITE_REQ &&
+        machine_id == LATENCY_MACHINE && t_id == 0 )
+      report_latency(latency_info);
 //		yellow_printf("Committed global id %lu \n", committed_g_id);
 	}
 }

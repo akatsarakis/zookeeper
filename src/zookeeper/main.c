@@ -3,7 +3,6 @@
 
 
 //Global Vars
-uint32_t* latency_counters;
 struct latency_counters latency_count;
 struct thread_stats t_stats[LEADERS_PER_MACHINE];
 struct remote_qp remote_follower_qp[FOLLOWER_MACHINE_NUM][FOLLOWERS_PER_MACHINE][FOLLOWER_QP_NUM];
@@ -126,9 +125,9 @@ int main(int argc, char *argv[])
 #if MEASURE_LATENCY == 1
 	latency_count.hot_writes  = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
 	latency_count.hot_reads   = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
-	latency_count.local_reqs  = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
-	latency_count.remote_reqs = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
   latency_count.total_measurements = 0;
+	latency_count.max_read_lat = 0;
+	latency_count.max_write_lat = 0;
 #endif
 	pthread_attr_t attr;
 	cpu_set_t pinned_hw_threads;

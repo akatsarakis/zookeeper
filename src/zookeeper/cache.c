@@ -144,6 +144,7 @@ inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op
 		}
 
 		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
+      assert(false);
 			resp[I].val_len = 0;
 			resp[I].val_ptr = NULL;
 			resp[I].type = CACHE_MISS;
@@ -292,7 +293,7 @@ void cache_populate_fixed_len(struct mica_kv* kv, int n, int val_len) {
 		//printf("Key Metadata: Lock(%u), State(%u), Counter(%u:%u)\n", op.key.meta.lock, op.key.meta.state, op.key.meta.version, op.key.meta.cid);
 		op.val_len = (uint8_t) (val_len >> SHIFT_BITS);
 		uint8_t val = 'a';//(uint8_t) (op_key[1] & 0xff);
-		memset(op.value, val, (uint8_t) val_len);
+		memset(op.value, val, (uint32_t) val_len);
 
 		mica_insert_one(kv, (struct mica_op *) &op, &resp);
 	}

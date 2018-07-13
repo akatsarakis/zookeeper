@@ -83,19 +83,11 @@ void *leader(void *arg)
                  (uint32_t)LDR_ACK_RECV_SIZE, 0, ack_recv_wr, cb->dgram_qp[PREP_ACK_QP_ID], ack_recv_sgl,
                  (void*) ack_buffer);
 
-	//req_type measured_req_flag = NO_REQ;
-	struct local_latency local_measure = {
-			.measured_local_region = -1,
-			.local_latency_start_polling = 0,
-			.flag_to_poll = NULL,
-	};
 
 	struct latency_flags latency_info = {
 			.measured_req_flag = NO_REQ,
-			.last_measured_op_i = 0,
+			.last_measured_sess_id = 0,
 	};
-	if (MEASURE_LATENCY && t_id == 0)
-		latency_info.key_to_measure = malloc(sizeof(struct cache_key));
 
 	struct cache_op *ops;
   struct commit_fifo *com_fifo;
@@ -167,7 +159,7 @@ void *leader(void *arg)
        * to send the commits and clear the p_write buffer space. The reason behind that
        * is that we do not want to wait for the commit broadcast to happen to clear the
        * buffer space for new writes*/
-      propagate_updates(p_writes, com_fifo, resp, t_id, &wait_for_gid_dbg_counter);
+      propagate_updates(p_writes, com_fifo, resp, &latency_info, t_id, &wait_for_gid_dbg_counter);
 
 
 
@@ -189,7 +181,7 @@ void *leader(void *arg)
     // the appropriate prepare messages
 		trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops,
                                            (uint8_t)FOLLOWER_MACHINE_NUM, p_writes, resp,
-                                           &latency_info, &start, protocol);
+                                           &latency_info, protocol);
 
 
     /* ---------------------------------------------------------------------------

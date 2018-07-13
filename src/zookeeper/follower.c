@@ -81,18 +81,12 @@ void *follower(void *arg)
 
   uint32_t credit_debug_cnt = 0, outstanding_writes = 0;
   long trace_iter = 0, sent_ack_tx = 0, credit_tx = 0, w_tx = 0;
-  struct local_latency local_measure = {
-    .measured_local_region = -1,
-    .local_latency_start_polling = 0,
-    .flag_to_poll = NULL,
-  };
 
   struct latency_flags latency_info = {
     .measured_req_flag = NO_REQ,
-    .last_measured_op_i = 0,
+    .last_measured_sess_id = 0,
   };
-  if (MEASURE_LATENCY && t_id == 0)
-      latency_info.key_to_measure = malloc(sizeof(struct cache_key));
+
 
   struct mica_resp *resp;
   struct ibv_mr *w_mr;
@@ -173,7 +167,7 @@ void *follower(void *arg)
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------
     ---------------------------------------------------------------------------*/
-    flr_propagate_updates(p_writes, p_acks, resp, prep_buf_mirror, t_id, &wait_for_gid_dbg_counter);
+    flr_propagate_updates(p_writes, p_acks, resp, prep_buf_mirror, &latency_info, t_id, &wait_for_gid_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------
@@ -182,7 +176,7 @@ void *follower(void *arg)
 
   // Propagate the updates before probing the cache
     trace_iter = batch_from_trace_to_cache(trace_iter, t_id, trace, ops, flr_id,
-                                           p_writes, resp, &latency_info, &start, protocol);
+                                           p_writes, resp, &latency_info, protocol);
 
 
 

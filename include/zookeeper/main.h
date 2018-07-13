@@ -31,14 +31,14 @@
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 
 #define ENABLE_MULTIPLE_SESSIONS 1
-#define SESSIONS_PER_THREAD 160
+
 
 #define DISABLE_GID_ORDERING 0
 #define DISABLE_UPDATING_KVS 0
 
 #define ENABLE_CACHE_STATS 0
-#define EXIT_ON_PRINT 0
-#define PRINT_NUM 4
+#define EXIT_ON_PRINT 1
+#define PRINT_NUM 2
 #define DUMP_STATS_2_FILE 0
 
 
@@ -46,7 +46,8 @@
 -----------------DEBUGGING-------------------------
 --------------------------------------------------*/
 
-#define MEASURE_LATENCY 0
+#define MEASURE_LATENCY 1
+#define LATENCY_MACHINE 1
 #define REMOTE_LATENCY_MARK 100 // mark a remote request for measurement by attaching this to the imm_data of the wr
 #define USE_A_SINGLE_KEY 0
 #define DISABLE_HYPERTHREADING 0 // do not shcedule two threads on the same core
@@ -95,17 +96,24 @@
 #define LEADER 2
 
 #define MIN_SS_BATCH 127// The minimum SS batch
-#define ENABLE_ASSERTIONS 0
-#define ENABLE_STAT_COUNTING 1
+
 #define MAXIMUM_INLINE_SIZE 188
 
+// CORE CONFIGURATION
+#define ENABLE_ASSERTIONS 1
+#define ENABLE_STAT_COUNTING 1
+#define SESSIONS_PER_THREAD 120
+#define W_CREDITS 15
+#define MAX_W_COALESCE 4
+#define PREPARE_CREDITS 15
+#define MAX_PREP_COALESCE 15
+#define COMMIT_CREDITS 30
 
 //--------FOLOWER Flow Control
-#define W_CREDITS 15
+
 
 //--------LEADER Flow Control
-#define PREPARE_CREDITS 15
-#define COMMIT_CREDITS 30
+
 
 #define LDR_VC_NUM 2
 #define PREP_VC 0
@@ -145,7 +153,7 @@
 #define COMMIT_FIFO_SIZE ((COM_ENABLE_INLINING == 1) ? (COMMIT_CREDITS) : (COM_BCAST_SS_BATCH))
 
 //---WRITES---
-#define MAX_W_COALESCE 8
+
 #define WRITE_HEADER (KEY_SIZE + 2) // opcode + val_len
 #define W_SIZE (VALUE_SIZE + WRITE_HEADER)
 #define FLR_W_SEND_SIZE (MAX_W_COALESCE * W_SIZE)
@@ -153,7 +161,7 @@
 #define FLR_W_ENABLE_INLINING ((FLR_W_SEND_SIZE > MAXIMUM_INLINE_SIZE) ?  0 : 1)
 
 //--PREPARES
-#define MAX_PREP_COALESCE 12
+
 #define PREP_MES_HEADER 6 // opcode(1), coalesce_num(1) l_id (4)
 #define PREP_SIZE (KEY_SIZE + 2 + VALUE_SIZE) // Size of a write
 #define LDR_PREP_SEND_SIZE (PREP_MES_HEADER + (MAX_PREP_COALESCE * PREP_SIZE))
@@ -471,7 +479,22 @@ struct recv_info {
 
 };
 
+typedef enum {
+	NO_REQ,
+	HOT_WRITE_REQ_BEFORE_CACHE,
+	HOT_WRITE_REQ,
+	HOT_READ_REQ,
+	LOCAL_REQ,
+	REMOTE_REQ
+} req_type;
 
+
+struct latency_flags {
+	req_type measured_req_flag;
+	uint64_t last_measured_sess_id;
+	struct timespec start;
+
+};
 
 struct thread_stats { // 2 cache lines
 	long long cache_hits_per_thread;
@@ -526,10 +549,10 @@ struct thread_params {
 };
 
 struct latency_counters{
-	uint32_t* remote_reqs;
-	uint32_t* local_reqs;
 	uint32_t* hot_reads;
 	uint32_t* hot_writes;
+	uint32_t max_read_lat;
+	uint32_t max_write_lat;
 	long long total_measurements;
 };
 
