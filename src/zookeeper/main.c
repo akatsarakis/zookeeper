@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
   assert(sizeof(struct w_message_ud_req) == LDR_W_RECV_SIZE);
   assert(SESSIONS_PER_THREAD < M_16);
   assert(FLR_MAX_RECV_COM_WRS >= FLR_CREDITS_IN_MESSAGE);
-  assert(CACHE_BATCH_SIZE > LEADER_PENDING_WRITES);
+  if (WRITE_RATIO > 0) assert(CACHE_BATCH_SIZE > LEADER_PENDING_WRITES);
 
 
 //
@@ -113,18 +113,18 @@ int main(int argc, char *argv[])
   assert(!(is_roce == 1 && ENABLE_MULTICAST));
 	is_leader = machine_id == LEADER_MACHINE;
 	num_threads =  is_leader ? LEADERS_PER_MACHINE : FOLLOWERS_PER_MACHINE;
-
 	param_arr = malloc(num_threads * sizeof(struct thread_params));
-	thread_arr = malloc((LEADERS_PER_MACHINE + FOLLOWERS_PER_MACHINE + 1) * sizeof(pthread_t));
+	thread_arr = malloc(num_threads * sizeof(pthread_t));
 	memset((struct thread_stats*) t_stats, 0, LEADERS_PER_MACHINE * sizeof(struct thread_stats));
-
 	qps_are_set_up = 0;
 
 	cache_init(0, LEADERS_PER_MACHINE); // the first ids are taken by the workers
 
 #if MEASURE_LATENCY == 1
 	latency_count.hot_writes  = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
+  memset(latency_count.hot_writes, 0, sizeof(uint32_t) * (LATENCY_BUCKETS + 1));
 	latency_count.hot_reads   = (uint32_t*) malloc(sizeof(uint32_t) * (LATENCY_BUCKETS + 1)); // the last latency bucket is to capture possible outliers (> than LATENCY_MAX)
+  memset(latency_count.hot_reads, 0, sizeof(uint32_t) * (LATENCY_BUCKETS + 1));
   latency_count.total_measurements = 0;
 	latency_count.max_read_lat = 0;
 	latency_count.max_write_lat = 0;

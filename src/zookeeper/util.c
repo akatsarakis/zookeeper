@@ -262,7 +262,8 @@ void manufacture_trace(struct trace_command **cmds, int g_id)
     if ((*cmds)[i].opcode == 1) writes++;
   }
 
-  if (g_id  == 0) printf("Write Ratio: %.2f%% \nTrace size %d \n", (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
+  if (g_id == 0) printf("T_id : %u Write Ratio: %.2f%% \nTrace size %d \n",
+                        g_id, (double) (writes * 100) / TRACE_SIZE, TRACE_SIZE);
   (*cmds)[TRACE_SIZE].opcode = NOP;
   // printf("CLient %d Trace size: %d, debug counter %d hot keys %d, cold keys %d \n",l_id, cmd_count, debug_cnt,
   //         t_stats[l_id].hot_keys_per_trace, t_stats[l_id].cold_keys_per_trace );
@@ -343,12 +344,16 @@ int spawn_stats_thread() {
     int core = -1;
     pthread_attr_init(&attr);
     CPU_ZERO(&cpus_stats);
-    if(num_threads > 17) {
-        core = 39;
-        CPU_SET(core, &cpus_stats);
+    if(num_threads < 10) {
+      core = 2 * (num_threads);
+      CPU_SET(core, &cpus_stats);
+    }
+    else if (num_threads < 20) {
+      core = 38;
+      CPU_SET(core, &cpus_stats);
     }
     else {
-        core = 2 * (num_threads) + 2;
+        core = 39;
         CPU_SET(core, &cpus_stats);
     }
     yellow_printf("Creating stats thread at core %d\n", core);
@@ -360,18 +365,26 @@ int spawn_stats_thread() {
 int pin_thread(int t_id) {
     int core;
     core = PHYSICAL_CORE_DISTANCE * t_id;
-    if(core > TOTAL_CORES_) { //if you run out of cores in numa node 0
+    if(core >= LOGICAL_CORES_PER_SOCKET) { //if you run out of cores in numa node 0
         if (ENABLE_HYPERTHREADING) { //use hyperthreading rather than go to the other socket
-            core = PHYSICAL_CORE_DISTANCE * (t_id - PHYSICAL_CORES_PER_SOCKET) + 2;
-            if (core > TOTAL_CORES_) { // now go to the other socket
-                core = PHYSICAL_CORE_DISTANCE * (t_id - 20) + 1 ;
-                if (core > TOTAL_CORES_) { // again do hyperthreading on the second socket
-                    core = PHYSICAL_CORE_DISTANCE * (t_id - 30) + 3;
+            core = LOGICAL_CORES_PER_SOCKET + PHYSICAL_CORE_DISTANCE * (t_id - PHYSICAL_CORES_PER_SOCKET);
+            if (core >= TOTAL_CORES_) { // now go to the other socket
+                core = PHYSICAL_CORE_DISTANCE * (t_id - LOGICAL_CORES_PER_SOCKET) + 1 ;
+                if (core >= LOGICAL_CORES_PER_SOCKET) { // again do hyperthreading on the second socket
+                    core = LOGICAL_CORES_PER_SOCKET + 1 +
+                      PHYSICAL_CORE_DISTANCE * (t_id - (LOGICAL_CORES_PER_SOCKET + PHYSICAL_CORES_PER_SOCKET));
                 }
             }
         }
         else { //spawn clients to numa node 1
-            core = (t_id - PHYSICAL_CORES_PER_SOCKET) * PHYSICAL_CORE_DISTANCE + 1;
+          core = PHYSICAL_CORE_DISTANCE * (t_id - PHYSICAL_CORES_PER_SOCKET) + 1;
+          if (core >= LOGICAL_CORES_PER_SOCKET) { // start hyperthreading
+            core = LOGICAL_CORES_PER_SOCKET + (PHYSICAL_CORE_DISTANCE * (t_id - LOGICAL_CORES_PER_SOCKET));
+            if (core >= TOTAL_CORES_) {
+              core = LOGICAL_CORES_PER_SOCKET + 1 +
+                     PHYSICAL_CORE_DISTANCE * (t_id - (LOGICAL_CORES_PER_SOCKET + PHYSICAL_CORES_PER_SOCKET));
+            }
+          }
         }
 
     }

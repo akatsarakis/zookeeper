@@ -130,7 +130,7 @@ void *leader(void *arg)
   uint32_t credit_debug_cnt[LDR_VC_NUM] = {0};
   uint32_t outstanding_prepares = 0;
 	struct timespec start, end;
-	green_printf("Leader %d  reached the loop \n", t_id);
+  if (t_id == 0) green_printf("Leader %d  reached the loop \n", t_id);
 
 	/* ---------------------------------------------------------------------------
 	------------------------------START LOOP--------------------------------
@@ -188,33 +188,35 @@ void *leader(void *arg)
 		------------------------------POLL FOR REMOTE WRITES--------------------------
 		---------------------------------------------------------------------------*/
     // get local and remote writes back to back to increase the write batch
-    poll_for_writes(w_buffer, &w_buf_pull_ptr, p_writes, cb->dgram_recv_cq[COMMIT_W_QP_ID],
-                    w_recv_wc, w_recv_info, t_id);
+    if (WRITE_RATIO > 0)
+      poll_for_writes(w_buffer, &w_buf_pull_ptr, p_writes, cb->dgram_recv_cq[COMMIT_W_QP_ID],
+                      w_recv_wc, w_recv_info, t_id);
 
 
     /* ---------------------------------------------------------------------------
 		------------------------------GET GLOBAL WRITE IDS--------------------------
 		---------------------------------------------------------------------------*/
     // Assign a global write  id to each new write
-    get_wids(p_writes, t_id);
+    if (WRITE_RATIO > 0) get_wids(p_writes, t_id);
 
     if (ENABLE_ASSERTIONS) check_ldr_p_states(p_writes, t_id);
 
 		/* ---------------------------------------------------------------------------
 		------------------------------BROADCASTS--------------------------------------
 		---------------------------------------------------------------------------*/
-		if (WRITE_RATIO > 0 )
+		if (WRITE_RATIO > 0)
 			/* Poll for credits - Perofrom broadcasts(both invs and updates)
 				 Post the appropriate number of credit receives before sending anything */
       broadcast_prepares(p_writes, credits, cb, credit_wc, credit_debug_cnt,
                          prep_send_sgl, prep_send_wr, &prep_br_tx, ack_recv_info,
                          remote_prep_buf, t_id,
                          &outstanding_prepares);
-
-    assert(p_writes->size <= LEADER_PENDING_WRITES);
-    for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
-      uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
-      assert (p_writes->w_state[ptr] == INVALID);
+    if (ENABLE_ASSERTIONS) {
+      assert(p_writes->size <= LEADER_PENDING_WRITES);
+      for (uint16_t i = 0; i < LEADER_PENDING_WRITES - p_writes->size; i++) {
+        uint16_t ptr = (p_writes->push_ptr + i) % LEADER_PENDING_WRITES;
+        assert (p_writes->w_state[ptr] == INVALID);
+      }
     }
 
 

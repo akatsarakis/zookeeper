@@ -28,7 +28,6 @@ void cache_reset_total_ops_issued(void);
 void cache_init(int cache_id, int num_threads) {
 	int i;
 	assert(sizeof(cache_meta) == 8); //make sure that the cache meta are 8B and thus can fit in mica unused key
-
 	cache.num_threads = num_threads;
 	cache_reset_total_ops_issued();
 	/// allocate and init metadata for the cache & threads
@@ -38,6 +37,7 @@ void cache_init(int cache_id, int num_threads) {
 		cache_meta_reset(&cache.meta[i]);
 	mica_init(&cache.hash_table, cache_id, CACHE_SOCKET, CACHE_NUM_BKTS, HERD_LOG_CAP);
 	cache_populate_fixed_len(&cache.hash_table, CACHE_NUM_KEYS, VALUE_SIZE);
+
 }
 
 
@@ -144,7 +144,8 @@ inline void cache_batch_op_trace(int op_num, int thread_id, struct cache_op **op
 		}
 
 		if(key_in_store[I] == 0) {  //Cache miss --> We get here if either tag or log key match failed
-      assert(false);
+      if (WRITE_RATIO > 0) assert(false);
+      else t_stats[thread_id].cache_hits_per_thread--;
 			resp[I].val_len = 0;
 			resp[I].val_ptr = NULL;
 			resp[I].type = CACHE_MISS;

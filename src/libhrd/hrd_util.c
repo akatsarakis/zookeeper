@@ -176,7 +176,6 @@ void* hrd_malloc_socket(int shm_key, int size, int socket_id)
 	else
 		shmid = shmget(shm_key,
 			size, IPC_CREAT | IPC_EXCL | 0666);
-
 	if(shmid == -1) {
 		switch(errno) {
 			case EACCES:
@@ -219,13 +218,11 @@ void* hrd_malloc_socket(int shm_key, int size, int socket_id)
 		}
 		assert(false);
 	}
-
 	void *buf = shmat(shmid, NULL, 0);
 	if(buf == NULL) {
 		printf("HRD: SHM malloc error: shmat() failed for key %d\n", shm_key);
 		exit(-1);
 	}
-
 	/* Bind the buffer to this socket */
 	const unsigned long nodemask = (1 << socket_id);
 	int ret = mbind(buf, size, MPOL_BIND, &nodemask, 32, 0);
@@ -233,15 +230,13 @@ void* hrd_malloc_socket(int shm_key, int size, int socket_id)
 		printf("HRD: SHM malloc error. mbind() failed for key %d\n", shm_key);
 		exit(-1);
 	}
-
 	// try to take advantage of TLB coalescing, if it is there
 	if (LEVERAGE_TLB_COALESCING) {
 		int page_no = CEILING(size, HUGE_PAGE_SIZE);
-		int i;
-		for (i = 0; i < page_no; i++)
+		for (int i = 0; i < page_no; i++) {
 			memset(buf + i * HUGE_PAGE_SIZE, 0, 1);
+		}
 	}
-
 	return buf;
 }
 

@@ -13,20 +13,42 @@
 #define TOTAL_CORES_ (TOTAL_CORES - 1)
 #define SOCKET_NUM 2
 #define PHYSICAL_CORES_PER_SOCKET 10
-#define PHYSICAL_CORE_DISTANCE 4 // distance between two physical cores of the same socket
+#define LOGICAL_CORES_PER_SOCKET 20
+#define PHYSICAL_CORE_DISTANCE 2 // distance between two physical cores of the same socket
 #define VIRTUAL_CORES_PER_SOCKET 20
-#define ENABLE_HYPERTHREADING 1
+#define ENABLE_HYPERTHREADING 0
 #define MAX_SERVER_PORTS 1 // better not change that
 
-#define THREADS_PER_MACHINE 5
+
+// CORE CONFIGURATION
+#define THREADS_PER_MACHINE 2
+#define MACHINE_NUM 5
+#define WRITE_RATIO 50  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define ENABLE_ASSERTIONS 0
+#define ENABLE_STAT_COUNTING 1
+#define SESSIONS_PER_THREAD 4
+#define W_CREDITS 6
+#define MAX_W_COALESCE 6
+#define PREPARE_CREDITS 8
+#define MAX_PREP_COALESCE 15
+#define COMMIT_CREDITS 30
+#define MEASURE_LATENCY 1
+#define LATENCY_MACHINE 1
+#define LATENCY_THREAD 1
+#define MEASURE_READ_LATENCY 2 // 2 means mixed due to complete lack of imagination
+#define EXIT_ON_PRINT 1
+#define PRINT_NUM 8
+
+
+
 #define FOLLOWERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define LEADERS_PER_MACHINE (THREADS_PER_MACHINE)
-#define MACHINE_NUM 3
+
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 #define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
 
-#define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 30 ? 0 : 1 )// socket where the cache is bind
+#define CACHE_SOCKET (FOLLOWERS_PER_MACHINE < 39 ? 0 : 1 )// socket where the cache is bind
 
 #define FOLLOWER_QP_NUM 3 /* The number of QPs for the follower */
 
@@ -37,8 +59,7 @@
 #define DISABLE_UPDATING_KVS 0
 
 #define ENABLE_CACHE_STATS 0
-#define EXIT_ON_PRINT 1
-#define PRINT_NUM 2
+
 #define DUMP_STATS_2_FILE 0
 
 
@@ -46,8 +67,8 @@
 -----------------DEBUGGING-------------------------
 --------------------------------------------------*/
 
-#define MEASURE_LATENCY 1
-#define LATENCY_MACHINE 1
+
+
 #define REMOTE_LATENCY_MARK 100 // mark a remote request for measurement by attaching this to the imm_data of the wr
 #define USE_A_SINGLE_KEY 0
 #define DISABLE_HYPERTHREADING 0 // do not shcedule two threads on the same core
@@ -99,15 +120,7 @@
 
 #define MAXIMUM_INLINE_SIZE 188
 
-// CORE CONFIGURATION
-#define ENABLE_ASSERTIONS 1
-#define ENABLE_STAT_COUNTING 1
-#define SESSIONS_PER_THREAD 120
-#define W_CREDITS 15
-#define MAX_W_COALESCE 4
-#define PREPARE_CREDITS 15
-#define MAX_PREP_COALESCE 15
-#define COMMIT_CREDITS 30
+
 
 //--------FOLOWER Flow Control
 
@@ -274,8 +287,8 @@
 
 
 //LATENCY Measurment
-#define MAX_LATENCY 400 //in us
-#define LATENCY_BUCKETS 200 //latency accuracy
+#define MAX_LATENCY 500 //in us
+#define LATENCY_BUCKETS 250 //latency accuracy
 
 /* SHM key for the 1st request region created by master. ++ for other RRs.*/
 #define MASTER_SHM_KEY 24
@@ -569,5 +582,5 @@ extern struct latency_counters latency_count;
 void *follower(void *arg);
 void *leader(void *arg);
 void *print_stats(void*);
-
+void print_latency_stats(void);
 #endif

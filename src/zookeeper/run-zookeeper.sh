@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-houston-sanantonio-austin-indianapolis-philly-chicago-detroit-baltimore-atlanta
-allIPs=(192.168.5.18 192.168.5.17 192.168.5.19  129.215.165.6 129.215.165.5  129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)
+#houston-sanantonio-austin-indianapolis-philly-atlanta-chicago-detroit-baltimore
+allIPs=(192.168.5.18 192.168.5.17 192.168.5.19 192.168.5.16 192.168.5.15 192.168.5.11 192.168.5.13)
 
 #houston-sanantonio-philly-austin-indianapolis-chicago-detroit-baltimore-atlanta
 #allIPs=(192.168.5.18 192.168.5.17 192.168.5.15 192.168.5.19  129.215.165.6 129.215.165.3 129.215.165.4 129.215.165.2 129.215.165.1)

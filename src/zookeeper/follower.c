@@ -133,7 +133,7 @@ void *follower(void *arg)
     wait_for_prepares_dbg_counter = 0, wait_for_coms_dbg_counter = 0;
   struct timespec start, end;
   uint16_t debug_ptr = 0;
-  green_printf("Follower %d  reached the loop \n", t_id);
+  if (t_id == 0) green_printf("Follower %d  reached the loop \n", t_id);
   /* ---------------------------------------------------------------------------
   ------------------------------START LOOP--------------------------------
   ---------------------------------------------------------------------------*/
@@ -146,28 +146,31 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------ POLL FOR PREPARES--------------------------
   ---------------------------------------------------------------------------*/
-    poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, prep_recv_cq,
-                      prep_recv_wc, prep_recv_info, prep_buf_mirror, t_id, flr_id, &wait_for_prepares_dbg_counter);
+    if (WRITE_RATIO > 0)
+      poll_for_prepares(prep_buffer, &prep_pull_ptr, p_writes, p_acks, prep_recv_cq,
+                        prep_recv_wc, prep_recv_info, prep_buf_mirror, t_id, flr_id, &wait_for_prepares_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------
   ------------------------------SEND ACKS-------------------------------------
   ---------------------------------------------------------------------------*/
-    send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
-                     prep_recv_info, flr_id,  ack, p_acks, t_id);
+    if (WRITE_RATIO > 0)
+      send_acks_to_ldr(p_writes, ack_send_wr, ack_send_sgl, &sent_ack_tx, cb,
+                       prep_recv_info, flr_id,  ack, p_acks, t_id);
 
     /* ---------------------------------------------------------------------------
     ------------------------------POLL FOR COMMITS---------------------------------
     ---------------------------------------------------------------------------*/
-
-    poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, com_recv_cq,
-                  com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx,
-                  remote_w_buf, t_id, flr_id, &wait_for_coms_dbg_counter);
+    if (WRITE_RATIO > 0)
+      poll_for_coms(com_buffer, &com_pull_ptr, p_writes, &credits, com_recv_cq,
+                    com_recv_wc, com_recv_info, cb, credit_send_wr, &credit_tx,
+                    remote_w_buf, t_id, flr_id, &wait_for_coms_dbg_counter);
 
     /* ---------------------------------------------------------------------------
     ------------------------------PROPAGATE UPDATES---------------------------------
     ---------------------------------------------------------------------------*/
-    flr_propagate_updates(p_writes, p_acks, resp, prep_buf_mirror, &latency_info, t_id, &wait_for_gid_dbg_counter);
+    if (WRITE_RATIO > 0)
+      flr_propagate_updates(p_writes, p_acks, resp, prep_buf_mirror, &latency_info, t_id, &wait_for_gid_dbg_counter);
 
 
   /* ---------------------------------------------------------------------------
@@ -183,6 +186,7 @@ void *follower(void *arg)
   /* ---------------------------------------------------------------------------
   ------------------------------SEND WRITES TO THE LEADER---------------------------
   ---------------------------------------------------------------------------*/
+  if (WRITE_RATIO > 0)
     send_writes_to_the_ldr(p_writes, &credits, cb, w_send_sgl, w_send_wr, &w_tx, remote_w_buf,
     t_id, &outstanding_writes);
 

@@ -1,7 +1,7 @@
 #include "util.h"
 #include "inline_util.h"
 
-void print_latency_stats(void);
+//void print_latency_stats(void);
 
 void *print_stats(void* no_arg) {
   int j;
@@ -124,17 +124,14 @@ void print_latency_stats(void){
             "SS" //Strong Consistency (stalling)
     };
 
-    sprintf(filename, "%s/latency_stats_%s_%s_%s_s_%d_a_%d_v_%d_m_%d_c_%d_w_%d_r_%d%s_C_%d.csv", path,
-            DISABLE_CACHE == 1 ? "BS" : exectype[protocol],
-            LOAD_BALANCE == 1 ? "UNIF" : "SKEW",
-            EMULATING_CREW == 1 ? "CREW" : "EREW",
-            DISABLE_CACHE == 0 && protocol == 2 && ENABLE_MULTIPLE_SESSIONS != 0 && SESSIONS_PER_THREAD != 0 ? SESSIONS_PER_THREAD: 0,
-            SKEW_EXPONENT_A,
-            USE_BIG_OBJECTS == 1 ? ((EXTRA_CACHE_LINES * 64) + BASE_VALUE_SIZE): BASE_VALUE_SIZE,
-            MACHINE_NUM, num_threads,
-            FOLLOWERS_PER_MACHINE, WRITE_RATIO,
-            BALANCE_HOT_WRITES == 1  ? "_lbw" : "",
-            CACHE_BATCH_SIZE);
+  char workload[10];
+  if (MEASURE_READ_LATENCY == 0) sprintf(workload, "WRITES");
+  else if (MEASURE_READ_LATENCY == 1) sprintf(workload, "READS");
+  else  sprintf(workload, "MIXED");
+    sprintf(filename, "%s/latency_%s_w_%d%s_%s.csv", path,
+            "ZOOK",
+            (WRITE_RATIO / 10), "%",
+            workload);
 
     latency_stats_fd = fopen(filename, "w");
 

@@ -66,19 +66,16 @@ void mica_init(struct mica_kv *kv,
 	kv->num_put_op = 0;
 	kv->num_insert_op = 0;
 	kv->num_index_evictions = 0;
-
 	/* Alloc index and initialize all entries to invalid */
 	// printf("mica: Allocting hash table index for instance %d\n", instance_id);
 	int ht_index_key = MICA_INDEX_SHM_KEY + instance_id;
 	kv->ht_index = (struct mica_bkt *) hrd_malloc_socket(ht_index_key,
 		num_bkts * sizeof(struct mica_bkt), node_id);
-
 	for(i = 0; i < num_bkts; i++) {
 		for(j = 0; j < 8; j++) {
 			kv->ht_index[i].slots[j].in_use = 0;
 		}
 	}
-
 	/* Alloc log */
 	// printf("mica: Allocting hash table log for instance %d\n", instance_id);
 	int ht_log_key = MICA_LOG_SHM_KEY + instance_id;
