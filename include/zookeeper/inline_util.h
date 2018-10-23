@@ -574,11 +574,15 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 {
 	uint32_t index = *pull_ptr;
 	uint32_t polled_messages = 0;
-	while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
+  int completed_messages =  ibv_poll_cq(ack_recv_cq, LEADER_ACK_BUF_SLOTS, ack_recv_wc);
+  if (completed_messages <= 0) return;
+  while (polled_messages < completed_messages) {
+	//while (incoming_acks[index].ack.opcode == CACHE_OP_ACK) {
 		volatile struct ack_message *ack = &incoming_acks[index].ack;
-    wait_for_the_entire_ack(ack, t_id, index);
+    //wait_for_the_entire_ack(ack, t_id, index);
 		uint16_t ack_num = ack->ack_num;
     if (ENABLE_ASSERTIONS) {
+      assert (ack->opcode == CACHE_OP_ACK);
       assert(ack_num > 0 && ack_num <= FLR_PENDING_WRITES);
       assert(ack->follower_id < FOLLOWER_MACHINE_NUM);
     }
@@ -644,7 +648,7 @@ static inline void poll_for_acks(struct ack_message_ud_req *incoming_acks, uint3
 	*pull_ptr = index;
 	// Poll for the completion of the receives
   if (polled_messages > 0) {
-    hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
+    //hrd_poll_cq(ack_recv_cq, polled_messages, ack_recv_wc);
     if (ENABLE_ASSERTIONS) (*dbg_counter) = 0;
   }
   else {
@@ -711,6 +715,8 @@ static inline void propagate_updates(struct pending_writes *p_writes, struct com
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
     p_writes->acks_seen[p_writes->pull_ptr] = 0;
 		if (p_writes->is_local[p_writes->pull_ptr]) {
+      if (DEBUG_WRITES) cyan_printf("Ldr %u freeing session %u \n", t_id,
+                               p_writes->session_id[p_writes->pull_ptr]);
 			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;
@@ -736,7 +742,7 @@ static inline void propagate_updates(struct pending_writes *p_writes, struct com
 	}
 }
 
-// Wait untile the entire write is there
+// Wait until the entire write is there
 static inline void wait_for_the_entire_write(volatile struct w_message *w_mes,
                                                uint16_t t_id, uint32_t index)
 {
@@ -928,8 +934,7 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
 {
 //  printf("Ldr %d bcasting commits \n", t_id);
   uint8_t vc = COMM_VC;
-  uint16_t commits_sent = 0, br_i = 0, credit_recv_counter = 0;
-	uint32_t posted_w_recvs = w_recv_info->posted_recvs;
+  uint16_t  br_i = 0, credit_recv_counter = 0;
   while (com_fifo->size > 0) {
     // Check if there are enough credits for a Broadcast
     if (!check_bcast_credits(credits, cb, credit_wc, credit_debug_cnt, vc)) {
@@ -942,7 +947,7 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
                      com_send_wr,  commit_br_tx, credits);
     (*commit_br_tx)++;
     for (uint16_t j = 0; j < FOLLOWER_MACHINE_NUM; j++) { credits[COMM_VC][j]--; }
-		commits_sent += com_mes->com_num;
+		//commits_sent += com_mes->com_num;
 		com_fifo->size--;
 		// Don't zero the com_num because there may be no INLINING
 		MOD_ADD(com_fifo->pull_ptr, COMMIT_FIFO_SIZE);
@@ -958,28 +963,24 @@ static inline void broadcast_commits(uint16_t credits[][FOLLOWER_MACHINE_NUM], s
     }
     if ((*commit_br_tx) % FLR_CREDITS_IN_MESSAGE == 0) credit_recv_counter++;
     if (br_i == MAX_BCAST_BATCH) {
-			if (posted_w_recvs < LDR_MAX_RECV_W_WRS) {
-				uint32_t recvs_to_post_num = MIN((LDR_MAX_RECV_W_WRS - posted_w_recvs),  commits_sent);// todo
-				post_recvs_with_recv_info(w_recv_info, recvs_to_post_num);
-				commits_sent = 0;
-				posted_w_recvs += recvs_to_post_num;
-			}
+      uint32_t recvs_to_post_num = LDR_MAX_RECV_W_WRS - w_recv_info->posted_recvs;
+      post_recvs_with_recv_info(w_recv_info, recvs_to_post_num);
+      w_recv_info->posted_recvs += recvs_to_post_num;
+
       post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
 			com_send_wr[0].send_flags = COM_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
       br_i = 0;
     }
   }
 	if (br_i > 0) {
-		if (posted_w_recvs < LDR_MAX_RECV_W_WRS) {
-			uint32_t recvs_to_post_num = MAX((LDR_MAX_RECV_W_WRS - posted_w_recvs),  commits_sent);
-			post_recvs_with_recv_info(w_recv_info, recvs_to_post_num);
-			posted_w_recvs += recvs_to_post_num;
-		}
+    uint32_t recvs_to_post_num = LDR_MAX_RECV_W_WRS - w_recv_info->posted_recvs;
+    post_recvs_with_recv_info(w_recv_info, recvs_to_post_num);
+    w_recv_info->posted_recvs += recvs_to_post_num;
 		post_recvs_and_batch_bcasts_to_NIC(br_i, cb, com_send_wr, credit_recv_wr, &credit_recv_counter, COMMIT_W_QP_ID);
 		com_send_wr[0].send_flags = COM_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
 	}
-	if (ENABLE_ASSERTIONS) assert(posted_w_recvs <= LDR_MAX_RECV_W_WRS);
-	w_recv_info->posted_recvs = posted_w_recvs;
+	if (ENABLE_ASSERTIONS) assert(w_recv_info->posted_recvs <= LDR_MAX_RECV_W_WRS);
+
 }
 
 
@@ -1036,9 +1037,9 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
 {
 //  printf("Ldr %d bcasting prepares \n", t_id);
 	uint8_t vc = PREP_VC;
-	uint16_t preps_sent = 0, br_i = 0, j, credit_recv_counter = 0;
+	uint16_t br_i = 0, j, credit_recv_counter = 0;
 	uint32_t bcast_pull_ptr = p_writes->prep_fifo->bcast_pull_ptr;
-	uint32_t posted_recvs = ack_recv_info->posted_recvs;
+//	uint32_t posted_recvs = ack_recv_info->posted_recvs;
 
 	while (p_writes->prep_fifo->bcast_size > 0) {
 
@@ -1068,33 +1069,28 @@ static inline void broadcast_prepares(struct pending_writes *p_writes,
       p_writes->prep_fifo->prep_message[p_writes->prep_fifo->push_ptr].coalesce_num = 0;
     }
     p_writes->prep_fifo->bcast_size -= coalesce_num;
-    preps_sent += coalesce_num;
+//    preps_sent += coalesce_num;
     MOD_ADD(bcast_pull_ptr, PREP_FIFO_SIZE);
 		if (br_i == MAX_BCAST_BATCH) {
-			if (posted_recvs < LDR_MAX_RECV_ACK_WRS) {
-				uint32_t recvs_to_post_num = LDR_MAX_RECV_ACK_WRS - posted_recvs;//MIN((LDR_MAX_RECV_ACK_WRS - posted_recvs), preps_sent);
-//        printf("Ldr %d posting %d recvs\n",t_id,  recvs_to_post_num);
-        if (recvs_to_post_num) post_recvs_with_recv_info(ack_recv_info, recvs_to_post_num);
-				posted_recvs += recvs_to_post_num;
-        preps_sent = 0;
-			}
+      uint32_t recvs_to_post_num = LDR_MAX_RECV_ACK_WRS - ack_recv_info->posted_recvs;
+      //printf("Ldr %d posting %d recvs\n",t_id,  recvs_to_post_num);
+      if (recvs_to_post_num) post_recvs_with_recv_info(ack_recv_info, recvs_to_post_num);
+      ack_recv_info->posted_recvs += recvs_to_post_num;
 			post_recvs_and_batch_bcasts_to_NIC(br_i, cb, prep_send_wr, NULL, &credit_recv_counter, PREP_ACK_QP_ID);
 			br_i = 0;
 			prep_send_wr[0].send_flags = LEADER_PREPARE_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
 		}
 	}
   if (br_i > 0) {
-    if (posted_recvs < LDR_MAX_RECV_ACK_WRS) {
-      uint32_t recvs_to_post_num = MIN((LDR_MAX_RECV_ACK_WRS - posted_recvs), preps_sent);
-//    printf("Ldr %d posting %d recvs\n",t_id,  recvs_to_post_num);
-      if (recvs_to_post_num) post_recvs_with_recv_info(ack_recv_info, recvs_to_post_num);
-      posted_recvs += recvs_to_post_num;
-    }
+    uint32_t recvs_to_post_num = LDR_MAX_RECV_ACK_WRS - ack_recv_info->posted_recvs;
+    //printf("Ldr %d posting %d recvs (2nd round)\n",t_id,  recvs_to_post_num);
+    if (recvs_to_post_num) post_recvs_with_recv_info(ack_recv_info, recvs_to_post_num);
+    ack_recv_info->posted_recvs += recvs_to_post_num;
     post_recvs_and_batch_bcasts_to_NIC(br_i, cb, prep_send_wr, NULL, &credit_recv_counter, PREP_ACK_QP_ID);
 		prep_send_wr[0].send_flags = LEADER_PREPARE_ENABLE_INLINING == 1 ? IBV_SEND_INLINE : 0;
   }
+  if (ENABLE_ASSERTIONS) assert(ack_recv_info->posted_recvs <= LDR_MAX_RECV_ACK_WRS);
 	p_writes->prep_fifo->bcast_pull_ptr = bcast_pull_ptr;
-	ack_recv_info->posted_recvs = posted_recvs;
 }
 
 
@@ -1556,7 +1552,7 @@ static inline void flr_propagate_updates(struct pending_writes *p_writes, struct
 		p_writes->w_state[p_writes->pull_ptr] = INVALID;
 		if (p_writes->is_local[p_writes->pull_ptr]) {
       if (DEBUG_WRITES)
-        cyan_printf("Found a local req from session %d \n", p_writes->session_id[p_writes->pull_ptr]);
+        cyan_printf("Found a local req freeing session %d \n", p_writes->session_id[p_writes->pull_ptr]);
 			p_writes->session_has_pending_write[p_writes->session_id[p_writes->pull_ptr]] = false;
 			p_writes->all_sessions_stalled = false;
 			p_writes->is_local[p_writes->pull_ptr] = false;

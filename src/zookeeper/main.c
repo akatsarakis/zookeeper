@@ -69,6 +69,7 @@ int main(int argc, char *argv[])
 	num_threads = -1;
 	is_roce = -1; machine_id = -1;
 	remote_IP = (char *)malloc(16 * sizeof(char));
+  dev_name = (char *)malloc(16 * sizeof(char));
 	global_w_id = 1; // DO not start from 0, because when checking for acks there is a non-zero test
   committed_global_w_id = 0;
 
@@ -80,6 +81,7 @@ int main(int argc, char *argv[])
 			{ .name = "is-roce",			.has_arg = 1, .val = 'r' },
 			{ .name = "remote-ips",			.has_arg = 1, .val = 'i' },
 			{ .name = "local-ip",			.has_arg = 1, .val = 'l' },
+      { .name = "device_name",			.has_arg = 1, .val = 'd'},
 			{ 0 }
 	};
 
@@ -102,6 +104,9 @@ int main(int argc, char *argv[])
 			case 'l':
 				local_IP = optarg;
 				break;
+      case 'd':
+        dev_name = optarg;
+        break;
 			default:
 				printf("Invalid argument %d\n", c);
 				assert(false);

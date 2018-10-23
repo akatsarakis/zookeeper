@@ -126,7 +126,7 @@
 int is_roce;
 int machine_id, num_threads;
 bool is_leader;
-char *remote_IP, *local_IP;
+char *remote_IP, *local_IP, *dev_name;
 
 
 // returns the number of remote IP addresses and fills the remoteIPs array with them
