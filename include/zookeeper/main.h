@@ -21,29 +21,30 @@
 
 
 // CORE CONFIGURATION
-#define THREADS_PER_MACHINE 1
-#define MACHINE_NUM 3
-#define WRITE_RATIO 500  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define THREADS_PER_MACHINE 10
+#define MACHINE_NUM 5
+#define WRITE_RATIO 200  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
 #define ENABLE_ASSERTIONS 0
-#define ENABLE_STAT_COUNTING 1
-#define SESSIONS_PER_THREAD 1
+#define ENABLE_STAT_COUNTING 0
+#define SESSIONS_PER_THREAD 22
 #define W_CREDITS 6
 #define MAX_W_COALESCE 6
-#define PREPARE_CREDITS 8
-#define MAX_PREP_COALESCE 15
+#define PREPARE_CREDITS 6
+#define MAX_PREP_COALESCE 9
 #define COMMIT_CREDITS 30
-#define MEASURE_LATENCY 1
+#define MEASURE_LATENCY 0
 #define LATENCY_MACHINE 1
 #define LATENCY_THREAD 1
 #define MEASURE_READ_LATENCY 2 // 2 means mixed due to complete lack of imagination
 #define EXIT_ON_PRINT 1
 #define PRINT_NUM 8
+#define FEED_FROM_TRACE 0
 
 
 
 #define FOLLOWERS_PER_MACHINE (THREADS_PER_MACHINE)
 #define LEADERS_PER_MACHINE (THREADS_PER_MACHINE)
-
+#define GET_GLOBAL_T_ID(m_id, t_id) ((m_id * THREADS_PER_MACHINE) + t_id)
 #define FOLLOWER_MACHINE_NUM (MACHINE_NUM - 1)
 #define LEADER_MACHINE 0 // which machine is the leader
 #define FOLLOWER_NUM (FOLLOWERS_PER_MACHINE * FOLLOWER_MACHINE_NUM)
@@ -81,7 +82,7 @@
 --------------------------------------------------*/
 
 #define BALANCE_HOT_WRITES 0// Use a uniform access pattern among hot writes
-#define SKEW_EXPONENT_A 99 // representation divided by 100 (i.e. 99 means a = 0.99)
+#define SKEW_EXPONENT_A 90 // representation divided by 100 (i.e. 99 means a = 0.99)
 #define EMULATING_CREW 1 // emulate crew, to facilitate running the CREW baseline
 #define DISABLE_CACHE 0 // Run Baseline
 #define LOAD_BALANCE 1 // Use a uniform access pattern
@@ -297,29 +298,14 @@
 //Defines for parsing the trace
 #define _200_K 200000
 #define MAX_TRACE_SIZE _200_K
-#define FEED_FROM_TRACE 0
-#define TRACE_SIZE K_128
+#define TRACE_SIZE K_128 // used only when manufacturing a trace
 #define NOP 0
-#define HOT_WRITE 1
-#define HOT_READ 2
-#define REMOTE_WRITE 3
-#define REMOTE_READ 4
-#define LOCAL_WRITE 5
-#define LOCAL_READ 6
+#define WRITE_OP 1
+#define READ_OP 2
 
-
-
-#define IS_READ(X)  ((X) == HOT_READ || (X) == LOCAL_READ || (X) == REMOTE_READ  ? 1 : 0)
-#define IS_WRITE(X)  ((X) == HOT_WRITE || (X) == LOCAL_WRITE || (X) == REMOTE_WRITE  ? 1 : 0)
-#define IS_HOT(X)  ((X) == HOT_WRITE || (X) == HOT_READ ? 1 : 0)
-#define IS_NORMAL(X)  (!IS_HOT((X)))
-#define IS_LOCAL(X) ((X) == LOCAL_WRITE || (X) == LOCAL_READ ? 1 : 0)
-#define IS_REMOTE(X) ((X) == REMOTE_WRITE || (X) == REMOTE_READ ? 1 : 0)
 
 struct trace_command {
 	uint8_t  opcode;
-	uint8_t  home_machine_id;
-	uint8_t  home_worker_id;
 	uint32_t key_id;
 	uint128 key_hash;
 };

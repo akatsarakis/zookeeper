@@ -473,7 +473,7 @@ static inline uint32_t batch_from_trace_to_cache(uint32_t trace_iter, uint32_t t
   //  green_printf("op_i %d , trace_iter %d, trace[trace_iter].opcode %d \n", op_i, trace_iter, trace[trace_iter].opcode);
   while (op_i < CACHE_BATCH_SIZE && working_session < SESSIONS_PER_THREAD) {
     if (ENABLE_ASSERTIONS) assert(trace[trace_iter].opcode != NOP);
-    is_update = (IS_WRITE(trace[trace_iter].opcode)) ? (uint8_t) 1 : (uint8_t) 0;
+    is_update = (trace[trace_iter].opcode == WRITE_OP) ? (uint8_t) 1 : (uint8_t) 0;
     *(uint128 *) &ops[op_i] = trace[trace_iter].key_hash;
     ops[op_i].opcode = is_update ? (uint8_t) CACHE_OP_PUT : (uint8_t) CACHE_OP_GET;
     ops[op_i].val_len = is_update ? (uint8_t) (VALUE_SIZE >> SHIFT_BITS) : (uint8_t) 0;
