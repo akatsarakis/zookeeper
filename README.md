@@ -12,8 +12,12 @@ The configuration parameters can be tuned in include/zookeeper/main.h
 1. A modified version of MICA that serves as the store for the Zookeeper
 2. A layer that implements the protocol that runs over 1
 
+## How to compile
+
+Run make in src/zookeeper
+
 ## How to run
-By running the script src/zookeeper/run-zookeeper.sh
+By running the script src/zookeeper/run-zookeeper.sh .
 The script has a list of ips. These must be replaced with the IPs of your own configuration.
 Crucially, the machine that is first in the last is the machine with id 0.
 That machine must run first before all the others: because it will be used as the central point to connect and exchange QP info
