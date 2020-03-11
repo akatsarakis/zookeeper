@@ -5,13 +5,24 @@ Zookeeper offers Sequential Consistency through a leader-based protocol. This pr
 The protocol is implemented over UD Sends and Receives.
 Leader broadcasts using the RDMA Multicast (but there is a knob to revert to unicasts too).
 All messages are batched, the stats will print out the batching size of all messages.
+The configuration parameters can be tuned in include/zookeeper/main.h
 
 
 ## Repository Contains
 1. A modified version of MICA that serves as the store for the Zookeeper
 2. A layer that implements the protocol that runs over 1
 
-## Requirments
+## How to run
+By running the script src/zookeeper/run-zookeeper.sh
+The script has a list of ips. These must be replaced with the IPs of your own configuration.
+Crucially, the machine that is first in the last is the machine with id 0.
+That machine must run first before all the others: because it will be used as the central point to connect and exchange QP info
+The IP of that machine must also be replaced in the ZK_REGISTRY_IP variable inside the same script.
+Note that the QP setting up is done using memcached, identically to [Herd](https://github.com/efficient/rdma_bench).
+That dependency is why the server that acts as the memcahed server must be run first.
+
+Also note that the script passes the name of the device as an input. You must modify this according to what you can see in ibv_devinfo.
+This helps disambiguate when servers have multiple NICs on them.
 
 ### Dependencies
 1. numactl
