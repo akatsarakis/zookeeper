@@ -8,10 +8,12 @@ HOSTS=( "austin" "houston" "sanantonio" "indianapolis" "philly" )
 #HOSTS=( "austin" "houston" "sanantonio" "indianapolis" "philly")
 LOCAL_HOST=`hostname`
 EXECUTABLES=("zookeeper" "run-zookeeper.sh")
-HOME_FOLDER="/home/user/zookeeper/src/zookeeper"
-DEST_FOLDER="/home/user/zookeeper-exec/src/zookeeper"
+HOME_FOLDER="/home/s1687259/zookeeper/src/zookeeper"
+DEST_FOLDER="/home/s1687259/zookeeper-exec/src/zookeeper"
+MAKE_FOLDER="/home/s1687259/zookeeper/src"
 
-cd $HOME_FOLDER
+cd $MAKE_FOLDER
+make clean
 make
 cd -
 

@@ -1,7 +1,7 @@
-LD      := gcc-6
+LD      := gcc-7
 LDFLAGS := -O3 -std=gnu11 -flto -lgsl -lgslcblas -libverbs -lrt -lpthread -lmemcached -lnuma -lrdmacm
-CC  = gcc-6
-CFLAGS   = -O3 -std=gnu11  -I../../include/mica -I../../include/libhrd -I../../include/zookeeper -I../../include/optik
+CC  = gcc-7
+CFLAGS   = -O3 -std=gnu11 -g -I../../include/mica -I../../include/libhrd -I../../include/zookeeper -I../../include/optik
 APPS    := zookeeper clean-o
 PROF    := -g -fno-omit-frame-pointer
 

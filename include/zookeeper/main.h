@@ -23,7 +23,7 @@
 // CORE CONFIGURATION
 #define THREADS_PER_MACHINE 10
 #define MACHINE_NUM 5
-#define WRITE_RATIO 200  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
+#define WRITE_RATIO 480  //Warning write ratio is given out of a 1000, e.g 10 means 10/1000 i.e. 1%
 #define ENABLE_ASSERTIONS 0
 #define ENABLE_STAT_COUNTING 0
 #define SESSIONS_PER_THREAD 22
@@ -32,13 +32,14 @@
 #define PREPARE_CREDITS 6
 #define MAX_PREP_COALESCE 9
 #define COMMIT_CREDITS 30
-#define MEASURE_LATENCY 0
+#define MEASURE_LATENCY 1
 #define LATENCY_MACHINE 1
 #define LATENCY_THREAD 1
-#define MEASURE_READ_LATENCY 2 // 2 means mixed due to complete lack of imagination
+#define MEASURE_READ_LATENCY 0 // 2 means mixed due to complete lack of imagination
 #define EXIT_ON_PRINT 1
 #define PRINT_NUM 8
 #define FEED_FROM_TRACE 0
+
 
 
 
