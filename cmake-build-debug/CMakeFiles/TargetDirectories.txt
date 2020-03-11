@@ -1,3 +1,0 @@
-/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/home/vasilis/Documents/houston/zookeeper/cmake-build-debug/CMakeFiles/zookeeper.dir
